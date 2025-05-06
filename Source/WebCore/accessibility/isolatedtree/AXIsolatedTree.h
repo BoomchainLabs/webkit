@@ -63,22 +63,23 @@ enum class AXPropertyFlag : uint32_t {
     CanSetSelectedAttribute                       = 1 << 1,
     CanSetValueAttribute                          = 1 << 2,
     HasBoldFont                                   = 1 << 3,
-    HasItalicFont                                 = 1 << 4,
-    HasPlainText                                  = 1 << 5,
-    IsEnabled                                     = 1 << 6,
-    IsExposedTableCell                            = 1 << 7,
-    IsGrabbed                                     = 1 << 8,
-    IsIgnored                                     = 1 << 9,
-    IsInlineText                                  = 1 << 10,
-    IsKeyboardFocusable                           = 1 << 11,
-    IsNonLayerSVGObject                           = 1 << 12,
-    IsTableRow                                    = 1 << 13,
-    SupportsCheckedState                          = 1 << 14,
-    SupportsDragging                              = 1 << 15,
-    SupportsExpanded                              = 1 << 16,
-    SupportsPath                                  = 1 << 17,
-    SupportsPosInSet                              = 1 << 18,
-    SupportsSetSize                               = 1 << 19
+    HasClickHandler                               = 1 << 4,
+    HasItalicFont                                 = 1 << 5,
+    HasPlainText                                  = 1 << 6,
+    IsEnabled                                     = 1 << 7,
+    IsExposedTableCell                            = 1 << 8,
+    IsGrabbed                                     = 1 << 9,
+    IsIgnored                                     = 1 << 10,
+    IsInlineText                                  = 1 << 11,
+    IsKeyboardFocusable                           = 1 << 12,
+    IsNonLayerSVGObject                           = 1 << 13,
+    IsTableRow                                    = 1 << 14,
+    SupportsCheckedState                          = 1 << 15,
+    SupportsDragging                              = 1 << 16,
+    SupportsExpanded                              = 1 << 17,
+    SupportsPath                                  = 1 << 18,
+    SupportsPosInSet                              = 1 << 19,
+    SupportsSetSize                               = 1 << 20
 };
 
 enum class AXProperty : uint16_t {
@@ -293,8 +294,10 @@ WTF::TextStream& operator<<(WTF::TextStream&, AXProperty);
 
 using AXPropertySet = HashSet<AXProperty, IntHash<AXProperty>, WTF::StrongEnumHashTraits<AXProperty>>;
 
+using AXIDAndCharacterRange = std::pair<Markable<AXID>, CharacterRange>;
+
 // If this type is modified, the switchOn statment in AXIsolatedObject::setProperty must be updated as well.
-using AXPropertyValueVariant = Variant<std::nullptr_t, Markable<AXID>, String, bool, int, unsigned, double, float, uint64_t, WallTime, DateComponentsType, AccessibilityButtonState, Color, std::shared_ptr<URL>, LayoutRect, FloatPoint, FloatRect, IntPoint, IntRect, std::pair<unsigned, unsigned>, std::optional<unsigned>, Vector<AccessibilityText>, Vector<AXID>, Vector<std::pair<Markable<AXID>, Markable<AXID>>>, Vector<String>, std::shared_ptr<Path>, OptionSet<AXAncestorFlag>, InsideLink, Vector<Vector<Markable<AXID>>>, CharacterRange, std::pair<Markable<AXID>, CharacterRange>, TagName, std::optional<AccessibilityOrientation>
+using AXPropertyValueVariant = Variant<std::nullptr_t, Markable<AXID>, String, bool, int, unsigned, double, float, uint64_t, WallTime, DateComponentsType, AccessibilityButtonState, Color, std::shared_ptr<URL>, LayoutRect, FloatPoint, FloatRect, IntPoint, IntRect, std::pair<unsigned, unsigned>, std::optional<unsigned>, Vector<AccessibilityText>, Vector<AXID>, Vector<std::pair<Markable<AXID>, Markable<AXID>>>, Vector<String>, std::shared_ptr<Path>, OptionSet<AXAncestorFlag>, InsideLink, Vector<Vector<Markable<AXID>>>, CharacterRange, std::shared_ptr<AXIDAndCharacterRange>, TagName, std::optional<AccessibilityOrientation>
 #if PLATFORM(COCOA)
     , RetainPtr<NSAttributedString>
     , RetainPtr<id>
@@ -303,13 +306,15 @@ using AXPropertyValueVariant = Variant<std::nullptr_t, Markable<AXID>, String, b
 #if ENABLE(AX_THREAD_TEXT_APIS)
     , RetainPtr<CTFontRef>
     , FontOrientation
-    , AXTextRuns
+    , std::shared_ptr<AXTextRuns>
     , TextEmissionBehavior
     , AXTextRunLineID
 #endif // ENABLE(AX_THREAD_TEXT_APIS)
 >;
 using AXPropertyVector = Vector<std::pair<AXProperty, AXPropertyValueVariant>>;
 WTF::TextStream& operator<<(WTF::TextStream&, const AXPropertyVector&);
+
+static_assert(sizeof(AXPropertyValueVariant) == 32, "The AX property value variant should not be larger than 32.");
 
 struct AXPropertyChange {
     AXID axID; // ID of the object whose properties changed.
