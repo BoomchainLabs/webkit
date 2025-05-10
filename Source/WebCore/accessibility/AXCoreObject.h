@@ -29,6 +29,7 @@
 #include "CharacterRange.h"
 #include "ColorConversion.h"
 #include "HTMLTextFormControlElement.h"
+#include "InputType.h"
 #include "LayoutRect.h"
 #include "LocalFrameLoaderClient.h"
 #include "LocalizedStrings.h"
@@ -721,16 +722,19 @@ enum class ForceLayout : bool { No, Yes };
 // Use this struct to store the isIgnored data that depends on the parents, so that in addChildren()
 // we avoid going up the parent chain for each element while traversing the tree with useful information already.
 struct AccessibilityIsIgnoredFromParentData {
-    AXCoreObject* parent { nullptr };
-    bool isAXHidden { false };
-    bool isPresentationalChildOfAriaRole { false };
-    bool isDescendantOfBarrenParent { false };
+    bool isValid : 1;
+    bool isAXHidden : 1;
+    bool isPresentationalChildOfAriaRole : 1;
+    bool isDescendantOfBarrenParent : 1;
 
     AccessibilityIsIgnoredFromParentData(AXCoreObject* parent = nullptr)
-        : parent(parent)
+        : isValid(!!parent)
+        , isAXHidden(false)
+        , isPresentationalChildOfAriaRole(false)
+        , isDescendantOfBarrenParent(false)
     { }
 
-    bool isNull() const { return !parent; }
+    bool isNull() const { return !isValid; }
 };
 
 struct LineDecorationStyle {
@@ -833,19 +837,22 @@ public:
     bool isMenu() const { return roleValue() == AccessibilityRole::Menu; }
     bool isMenuBar() const { return roleValue() == AccessibilityRole::MenuBar; }
     bool isMenuItem() const;
-    virtual bool isInputImage() const = 0;
+    bool isInputImage() const;
     bool isProgressIndicator() const { return roleValue() == AccessibilityRole::ProgressIndicator || roleValue() == AccessibilityRole::Meter; }
     bool isSlider() const { return roleValue() == AccessibilityRole::Slider; }
     bool isControl() const;
-    virtual bool isRadioInput() const = 0;
+    bool isRadioInput() const;
     // lists support (l, ul, ol, dl)
     bool isList() const;
-    virtual bool isFileUploadButton() const = 0;
+    virtual bool isDescriptionList() const = 0;
+    bool isFileUploadButton() const;
     // Returns true for objects whose role implies interactivity. For example, when a screen
     // reader announces "link", it doesn't need to announce "clickable" or "pressable" — that
     // is implicit in the concept of a link.
     bool isImplicitlyInteractive() const;
     bool isReplacedElement() const;
+
+    virtual std::optional<InputType::Type> inputType() const = 0;
 
     // Table support.
     virtual bool isTable() const = 0;
@@ -954,6 +961,7 @@ public:
 
     bool isLandmark() const;
     virtual bool isKeyboardFocusable() const = 0;
+    virtual bool isOutput() const = 0;
 
     virtual bool isChecked() const = 0;
     virtual bool isEnabled() const = 0;
@@ -1034,6 +1042,7 @@ public:
     bool supportsActiveDescendant() const;
     bool isActiveDescendantOfFocusedContainer() const;
     virtual bool supportsARIAOwns() const = 0;
+    bool supportsARIARoleDescription() const;
 
     // Retrieval of related objects.
     AXCoreObject* activeDescendant() const;
@@ -1103,7 +1112,7 @@ public:
     virtual AXCoreObject* focusedUIElement() const = 0;
 
 #if PLATFORM(COCOA)
-    virtual RemoteAXObjectRef remoteParentObject() const = 0;
+    virtual RetainPtr<RemoteAXObjectRef> remoteParent() const = 0;
 #endif
     virtual AXCoreObject* parentObject() const = 0;
     virtual AXCoreObject* parentObjectUnignored() const;
@@ -1180,7 +1189,13 @@ public:
     String rolePlatformString() { return { }; }
 #endif // PLATFORM(MAC)
     // Localized string that describes the object's role.
-    virtual String roleDescription() = 0;
+    String roleDescription();
+#if PLATFORM(MAC)
+    String rolePlatformDescription();
+#else
+    String rolePlatformDescription() { return String(); }
+#endif
+    virtual String ariaRoleDescription() const = 0;
     // Localized string that describes ARIA landmark roles.
     String ariaLandmarkRoleDescription() const;
     // Non-localized string associated with the object's subrole.
@@ -1313,6 +1328,31 @@ public:
     AXCoreObject* previousInPreOrder(bool updateChildrenIfNeeded = true, AXCoreObject* stayWithin = nullptr);
     AXCoreObject* previousSiblingIncludingIgnored(bool updateChildrenIfNeeded);
     AXCoreObject* deepestLastChildIncludingIgnored(bool updateChildrenIfNeeded);
+
+    void setIndexInParent(unsigned index)
+    {
+        m_indexInParent = index;
+    }
+    bool shouldSetChildIndexInParent() const
+    {
+        auto role = roleValue();
+        // Columns and table header containers add cells as children, but are not their "true" parent
+        // (the rows are), so these two roles should not update their children's index-in-parent.
+        return role != AccessibilityRole::Column && role != AccessibilityRole::TableHeaderContainer;
+    }
+    // Returns true if setting the index-in-parent was successful.
+    bool setChildIndexInParent(AXCoreObject& child, unsigned index) const
+    {
+        bool shouldSetChildIndex = shouldSetChildIndexInParent();
+        if (shouldSetChildIndex)
+            child.setIndexInParent(index);
+        return shouldSetChildIndex;
+    }
+    unsigned indexInParent() const { return m_indexInParent; }
+#ifndef NDEBUG
+    virtual void verifyChildrenIndexInParent() const = 0;
+    void verifyChildrenIndexInParent(const AccessibilityChildrenVector&) const;
+#endif
 
     virtual void detachFromParent() = 0;
 
@@ -1518,7 +1558,7 @@ protected:
     explicit AXCoreObject(AXID axID)
         : m_id(axID)
     { }
-    AccessibilityRole m_role { AccessibilityRole::Unknown };
+
 
 private:
     virtual String dbgInternal(bool, OptionSet<AXDebugStringOption>) const = 0;
@@ -1529,6 +1569,17 @@ private:
 
     void ariaTreeRows(AXCoreObject::AccessibilityChildrenVector& rows, AXCoreObject::AccessibilityChildrenVector& ancestors);
 
+    size_t indexInSiblings(const AccessibilityChildrenVector&) const;
+
+// MARK: Member variables
+protected:
+    AccessibilityRole m_role { AccessibilityRole::Unknown };
+    // This index always refers to the parent's m_children. Keep in mind that when
+    // ENABLE(INCLUDE_IGNORE_IN_CORE_AX_TREE), m_children includes ignored objects, so cannot be
+    // used to determine the place of |this| relative to its unignored siblings (only its ignored ones).
+    unsigned m_indexInParent;
+
+private:
     AXID m_id;
 #if PLATFORM(COCOA)
     RetainPtr<WebAccessibilityObjectWrapper> m_wrapper;

@@ -424,8 +424,19 @@ set(WebCore_PRIVATE_FRAMEWORK_HEADERS
     Modules/identity/DigitalCredentialsRequestData.h
     Modules/identity/DigitalCredentialsResponseData.h
     Modules/identity/IdentityCredentialProtocol.h
-    Modules/identity/MobileDocumentRequest.h
-    Modules/identity/OpenID4VPRequest.h
+
+    Modules/identity/protocols/DigitalCredentialsProtocols.h
+    Modules/identity/protocols/UnvalidatedDigitalCredentialRequest.h
+
+    Modules/identity/protocols/ISO18013/ISO18013.h
+    Modules/identity/protocols/ISO18013/ISO18013DocumentRequest.h
+    Modules/identity/protocols/ISO18013/ISO18013DocumentRequestSet.h
+    Modules/identity/protocols/ISO18013/ISO18013ElementInfo.h
+    Modules/identity/protocols/ISO18013/ISO18013PresentmentRequest.h
+    Modules/identity/protocols/ISO18013/MobileDocumentRequest.h
+    Modules/identity/protocols/ISO18013/ValidatedMobileDocumentRequest.h
+
+    Modules/identity/protocols/openid/OpenID4VPRequest.h
 
     Modules/identity/dummy/DummyCredentialRequestCoordinatorClient.h
 
@@ -539,8 +550,10 @@ set(WebCore_PRIVATE_FRAMEWORK_HEADERS
     Modules/model-element/HTMLModelElement.h
     Modules/model-element/HTMLModelElementCamera.h
     Modules/model-element/ModelPlayer.h
+    Modules/model-element/ModelPlayerAnimationState.h
     Modules/model-element/ModelPlayerClient.h
     Modules/model-element/ModelPlayerProvider.h
+    Modules/model-element/ModelPlayerTransformState.h
 
     Modules/model-element/dummy/DummyModelPlayer.h
     Modules/model-element/dummy/DummyModelPlayerProvider.h
@@ -1420,6 +1433,7 @@ set(WebCore_PRIVATE_FRAMEWORK_HEADERS
     html/ImageDataStorageFormat.h
     html/ImageDocument.h
     html/InputMode.h
+    html/InputType.h
     html/LinkIconCollector.h
     html/LinkIconType.h
     html/LinkRelAttribute.h
@@ -1643,7 +1657,7 @@ set(WebCore_PRIVATE_FRAMEWORK_HEADERS
 
     page/ActivityState.h
     page/ActivityStateChangeObserver.h
-    page/AdjustViewSizeOrNot.h
+    page/AdjustViewSize.h
     page/AlternativeTextClient.h
     page/AttachmentElementClient.h
     page/AutoplayEvent.h
@@ -1957,6 +1971,7 @@ set(WebCore_PRIVATE_FRAMEWORK_HEADERS
     platform/ScrollView.h
     platform/ScrollableArea.h
     platform/Scrollbar.h
+    platform/ScrollbarMode.h
     platform/ScrollbarTheme.h
     platform/ScrollbarThemeComposite.h
     platform/ScrollingEffectsController.h
@@ -2277,6 +2292,7 @@ set(WebCore_PRIVATE_FRAMEWORK_HEADERS
     platform/graphics/VelocityData.h
     platform/graphics/VideoLayerManager.h
     platform/graphics/VideoPlaybackQualityMetrics.h
+    platform/graphics/VideoProjectionMetadata.h
     platform/graphics/VideoTarget.h
     platform/graphics/VideoTrackPrivate.h
     platform/graphics/VideoTrackPrivateClient.h

@@ -37,9 +37,9 @@ class RemoteFrameView;
 class RemoteFrameGeometryTransformer {
 public:
     WEBCORE_EXPORT RemoteFrameGeometryTransformer(Ref<RemoteFrameView>&&, Ref<LocalFrameView>&&, FrameIdentifier);
-    RemoteFrameGeometryTransformer(RemoteFrameGeometryTransformer&&);
+    WEBCORE_EXPORT RemoteFrameGeometryTransformer(RemoteFrameGeometryTransformer&&);
     RemoteFrameGeometryTransformer(const RemoteFrameGeometryTransformer&) = delete;
-    RemoteFrameGeometryTransformer& operator=(RemoteFrameGeometryTransformer&&);
+    WEBCORE_EXPORT RemoteFrameGeometryTransformer& operator=(RemoteFrameGeometryTransformer&&);
     RemoteFrameGeometryTransformer& operator=(const RemoteFrameGeometryTransformer&) = delete;
     WEBCORE_EXPORT ~RemoteFrameGeometryTransformer();
 

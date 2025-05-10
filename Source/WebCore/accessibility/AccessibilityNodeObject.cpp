@@ -573,11 +573,21 @@ void AccessibilityNodeObject::clearChildren()
 
 void AccessibilityNodeObject::updateOwnedChildren()
 {
-    for (Ref child : ownedObjects()) {
-        // If the child already exists as a DOM child, but is also in the owned objects, then
-        // we need to re-order this child in the aria-owns order.
-        m_children.removeFirst(child);
+    bool didRemoveChild = false;
+    auto ownedObjects = this->ownedObjects();
+    for (const auto& child : ownedObjects) {
+        if (m_children.removeFirst(child)) {
+            // If the child already exists as a DOM child, but is also in the owned objects, then
+            // we need to re-order this child in the aria-owns order.
+            didRemoveChild = true;
+        }
         addChild(downcast<AccessibilityObject>(child.get()));
+    }
+
+    if (didRemoveChild) {
+        // Fix-up the children index-in-parent fields after removing a child in the middle of m_children,
+        // as any index after the removed child will now be wrong.
+        resetChildrenIndexInParent();
     }
 }
 
@@ -619,6 +629,10 @@ void AccessibilityNodeObject::addChildren()
 #endif // USE(ATSPI)
 
     updateOwnedChildren();
+
+#ifndef NDEBUG
+    verifyChildrenIndexInParent();
+#endif
 }
 
 bool AccessibilityNodeObject::canHaveChildren() const
@@ -783,14 +797,6 @@ bool AccessibilityNodeObject::isSecureField() const
     if (!input || ariaRoleAttribute() != AccessibilityRole::Unknown)
         return false;
     return input->isSecureField();
-}
-
-bool AccessibilityNodeObject::isInputImage() const
-{
-    if (roleValue() != AccessibilityRole::Button)
-        return false;
-    RefPtr input = dynamicDowncast<HTMLInputElement>(node());
-    return input && input->isImageButton();
 }
 
 bool AccessibilityNodeObject::isEnabled() const
@@ -1083,12 +1089,6 @@ std::optional<AccessibilityOrientation> AccessibilityNodeObject::orientationFrom
 bool AccessibilityNodeObject::isBusy() const
 {
     return elementAttributeValue(aria_busyAttr);
-}
-
-bool AccessibilityNodeObject::isRadioInput() const
-{
-    auto* inputElement = dynamicDowncast<HTMLInputElement>(node());
-    return inputElement ? inputElement->isRadioButton() : false;
 }
 
 bool AccessibilityNodeObject::isFieldset() const

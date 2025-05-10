@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2025 Apple Inc. All rights reserved.
+ * Copyright (C) 2003-2024 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -165,6 +165,7 @@ protected:
     macro(AutocorrectionOccured) \
     macro(AutofillTypeChanged) \
     macro(ARIAColumnIndexChanged) \
+    macro(ARIARoleDescriptionChanged) \
     macro(ARIARowIndexChanged) \
     macro(BrailleLabelChanged) \
     macro(BrailleRoleDescriptionChanged) \
@@ -193,6 +194,7 @@ protected:
     macro(HasPopupChanged) \
     macro(IdAttributeChanged) \
     macro(ImageOverlayChanged) \
+    macro(InputTypeChanged) \
     macro(IsAtomicChanged) \
     macro(KeyShortcutsChanged) \
     macro(LabelChanged) \
@@ -207,7 +209,6 @@ protected:
     macro(PopoverTargetChanged) \
     macro(PositionInSetChanged) \
     macro(RoleChanged) \
-    macro(RoleDescriptionChanged) \
     macro(RowIndexChanged) \
     macro(RowSpanChanged) \
     macro(CellScopeChanged) \
@@ -637,7 +638,7 @@ public:
     void updateRelations(Element&, const QualifiedName&);
 
 #if PLATFORM(IOS_FAMILY)
-    void relayNotification(String&&, RetainPtr<NSData>&&);
+    void relayNotification(const String&, RetainPtr<NSData>);
 #endif
 
 #if PLATFORM(MAC)
@@ -764,8 +765,9 @@ private:
     void deferRowspanChange(AccessibilityObject*);
     void handleChildrenChanged(AccessibilityObject&);
     void handleAllDeferredChildrenChanged();
+    void handleInputTypeChanged(Element&);
     void handleRoleChanged(Element&, const AtomString&, const AtomString&);
-    void handleRoleDescriptionChanged(Element&);
+    void handleARIARoleDescriptionChanged(Element&);
     void handleMenuOpened(Element&);
     void handleLiveRegionCreated(Element&);
     void handleMenuItemSelected(Element*);

@@ -324,6 +324,8 @@ set(WebKit_MESSAGES_IN_FILES
 
     WebProcess/Databases/IndexedDB/WebIDBConnectionToServer
 
+    WebProcess/DigitalCredentials/DigitalCredentialsCoordinator
+
     WebProcess/Extensions/WebExtensionContextProxy
     WebProcess/Extensions/WebExtensionControllerProxy
 
@@ -721,6 +723,10 @@ set(WebKit_FRAMEWORKS
 )
 if (NOT USE_SYSTEM_MALLOC)
     list(APPEND WebKit_FRAMEWORKS bmalloc)
+endif ()
+
+if (ENABLE_MALLOC_HEAP_BREAKDOWN)
+    list(APPEND WebKit_FRAMEWORKS ${MALLOC_HEAP_BREAKDOWN_FRAMEWORKS})
 endif ()
 
 set(WebProcess_LIBRARIES WebKit)

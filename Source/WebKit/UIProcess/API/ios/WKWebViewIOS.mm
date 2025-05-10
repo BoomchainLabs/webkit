@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2025 Apple Inc. All rights reserved.
+ * Copyright (C) 2014-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -1165,27 +1165,22 @@ static void changeContentOffsetBoundedInValidRange(UIScrollView *scrollView, Web
 }
 
 #if ENABLE(OVERLAY_REGIONS_IN_EVENT_REGION)
-static void addOverlayEventRegions(WebCore::PlatformLayerIdentifier layerID, const WebKit::LayerPropertiesMap& changedLayerPropertiesMap, HashSet<WebCore::PlatformLayerIdentifier>& overlayRegionsIDs, const WebKit::RemoteLayerTreeHost& host)
+static void addOverlayEventRegions(WebCore::PlatformLayerIdentifier layerID, HashSet<WebCore::PlatformLayerIdentifier>& overlayRegionsIDs, const WebKit::RemoteLayerTreeHost& host)
 {
-    const auto& it = changedLayerPropertiesMap.find(layerID);
-    if (it == changedLayerPropertiesMap.end())
-        return;
-
     const auto* node = host.nodeForID(layerID);
     if (!node)
         return;
     if ([node->uiView() isKindOfClass:[WKBaseScrollView class]])
         return;
 
-    const auto& layerProperties = *it->value;
-    if (layerProperties.changedProperties & WebKit::LayerChange::EventRegionChanged) {
-        CGRect rect = layerProperties.eventRegion.region().bounds();
-        if (!CGRectIsEmpty(rect))
-            overlayRegionsIDs.add(layerID);
-    }
+    CGRect rect = node->eventRegion().region().bounds();
+    if (!CGRectIsEmpty(rect))
+        overlayRegionsIDs.add(layerID);
 
-    for (auto childLayerID : layerProperties.children)
-        addOverlayEventRegions(childLayerID, changedLayerPropertiesMap, overlayRegionsIDs, host);
+    for (CALayer *sublayer in node->layer().sublayers) {
+        if (auto *subnode = WebKit::RemoteLayerTreeNode::forCALayer(sublayer))
+            addOverlayEventRegions(subnode->layerID(), overlayRegionsIDs, host);
+    }
 }
 
 static CGRect snapRectToScrollViewEdges(CGRect rect, CGRect viewport)
@@ -1403,15 +1398,13 @@ static void configureScrollViewWithOverlayRegionsIDs(WKBaseScrollView* scrollVie
     scrollingCoordinatorProxy->removeDestroyedLayerIDs(destroyedLayers);
 
     WKBaseScrollView *overlayRegionScrollView = [self _selectOverlayRegionScrollView:scrollingCoordinatorProxy];
-    auto overlayRegionsIDs = scrollingCoordinatorProxy->overlayRegionLayerIDs();
+    HashSet<WebCore::PlatformLayerIdentifier> overlayRegionsIDs;
     const auto& fixedIDs = scrollingCoordinatorProxy->fixedScrollingNodeLayerIDs();
 
     for (auto layerID : fixedIDs)
-        addOverlayEventRegions(layerID, changedLayerPropertiesMap, overlayRegionsIDs, layerTreeHost);
+        addOverlayEventRegions(layerID, overlayRegionsIDs, layerTreeHost);
 
     configureScrollViewWithOverlayRegionsIDs(overlayRegionScrollView, layerTreeHost, overlayRegionsIDs);
-
-    scrollingCoordinatorProxy->updateOverlayRegionLayerIDs(overlayRegionsIDs);
 }
 
 - (void)_updateOverlayRegionsForCustomContentView
@@ -4287,9 +4280,9 @@ static bool isLockdownModeWarningNeeded()
 - (void)_detectDataWithTypes:(WKDataDetectorTypes)types completionHandler:(dispatch_block_t)completion
 {
 #if ENABLE(DATA_DETECTION)
-    _page->detectDataInAllFrames(fromWKDataDetectorTypes(types), [completion = makeBlockPtr(completion), page = WeakPtr { _page.get() }] (auto&& result) {
+    _page->detectDataInAllFrames(fromWKDataDetectorTypes(types), [completion = makeBlockPtr(completion), page = WeakPtr { _page.get() }] (auto& result) {
         if (page)
-            page->setDataDetectionResult(WTFMove(result));
+            page->setDataDetectionResult(result);
         if (completion)
             completion();
     });

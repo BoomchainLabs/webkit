@@ -30,6 +30,7 @@
 #include "config.h"
 #include "LocalFrame.h"
 
+#include "AdjustViewSize.h"
 #include "AnimationTimelinesController.h"
 #include "ApplyStyleCommand.h"
 #include "BackForwardCache.h"
@@ -145,6 +146,12 @@ static const Seconds scrollFrequency { 1000_s / 60. };
 
 DEFINE_DEBUG_ONLY_GLOBAL(WTF::RefCountedLeakCounter, frameCounter, ("Frame"));
 
+struct OverrideScreenSize {
+    WTF_MAKE_STRUCT_FAST_ALLOCATED;
+
+    FloatSize size;
+};
+
 static inline float parentPageZoomFactor(LocalFrame* frame)
 {
     SUPPRESS_UNCOUNTED_LOCAL auto* parent = dynamicDowncast<LocalFrame>(frame->tree().parent());
@@ -174,6 +181,11 @@ LocalFrame::LocalFrame(Page& page, ClientCreator&& clientCreator, FrameIdentifie
     : Frame(page, identifier, FrameType::Local, ownerElement, parent, opener, WTFMove(frameTreeSyncData))
     , m_loader(makeUniqueRefWithoutRefCountedCheck<FrameLoader>(*this, WTFMove(clientCreator)))
     , m_script(makeUniqueRef<ScriptController>(*this))
+#if PLATFORM(IOS_FAMILY)
+    , m_viewportArguments(makeUniqueRef<ViewportArguments>())
+    , m_rangedSelectionBase(makeUniqueRef<VisibleSelection>())
+    , m_rangedSelectionInitialExtent(makeUniqueRef<VisibleSelection>())
+#endif
     , m_pageZoomFactor(parentPageZoomFactor(this))
     , m_textZoomFactor(parentTextZoomFactor(this))
     , m_rootFrame(WebCore::rootFrame(*this))
@@ -664,7 +676,7 @@ bool LocalFrame::requestDOMPasteAccess(DOMPasteAccessCategory pasteAccessCategor
     return false;
 }
 
-void LocalFrame::setPrinting(bool printing, const FloatSize& pageSize, const FloatSize& originalPageSize, float maximumShrinkRatio, AdjustViewSizeOrNot shouldAdjustViewSize)
+void LocalFrame::setPrinting(bool printing, const FloatSize& pageSize, const FloatSize& originalPageSize, float maximumShrinkRatio, AdjustViewSize shouldAdjustViewSize)
 {
     if (!view() || !document())
         return;
@@ -688,7 +700,7 @@ void LocalFrame::setPrinting(bool printing, const FloatSize& pageSize, const Flo
         frameView->forceLayoutForPagination(pageSize, originalPageSize, maximumShrinkRatio, shouldAdjustViewSize);
     else {
         frameView->forceLayout();
-        if (shouldAdjustViewSize == AdjustViewSize)
+        if (shouldAdjustViewSize == AdjustViewSize::Yes)
             frameView->adjustViewSize();
     }
 
@@ -1143,8 +1155,8 @@ void LocalFrame::dropChildren()
 
 FloatSize LocalFrame::screenSize() const
 {
-    if (!m_overrideScreenSize.isEmpty())
-        return m_overrideScreenSize;
+    if (m_overrideScreenSize)
+        return m_overrideScreenSize->size;
 
     auto defaultSize = screenRect(protectedView().get()).size();
     RefPtr document = this->document();
@@ -1163,10 +1175,10 @@ FloatSize LocalFrame::screenSize() const
 
 void LocalFrame::setOverrideScreenSize(FloatSize&& screenSize)
 {
-    if (m_overrideScreenSize == screenSize)
+    if (m_overrideScreenSize && m_overrideScreenSize->size == screenSize)
         return;
 
-    m_overrideScreenSize = WTFMove(screenSize);
+    m_overrideScreenSize = makeUnique<OverrideScreenSize>(OverrideScreenSize { WTFMove(screenSize) });
     if (RefPtr document = this->document())
         document->updateViewportArguments();
 }
@@ -1293,17 +1305,22 @@ void LocalFrame::frameWasDisconnectedFromOwner() const
 
 void LocalFrame::storageAccessExceptionReceivedForDomain(const RegistrableDomain& domain)
 {
-    m_storageAccessExceptionDomains.add(domain);
+    if (!m_storageAccessExceptionDomains)
+        m_storageAccessExceptionDomains = makeUnique<HashSet<RegistrableDomain>>();
+    m_storageAccessExceptionDomains->add(domain);
 }
 
 bool LocalFrame::requestSkipUserActivationCheckForStorageAccess(const RegistrableDomain& domain)
 {
-    auto iter = m_storageAccessExceptionDomains.find(domain);
-    if (iter == m_storageAccessExceptionDomains.end())
+    if (!m_storageAccessExceptionDomains)
+        return false;
+
+    auto iter = m_storageAccessExceptionDomains->find(domain);
+    if (iter == m_storageAccessExceptionDomains->end())
         return false;
 
     // We only allow the domain to skip check once.
-    m_storageAccessExceptionDomains.remove(iter);
+    m_storageAccessExceptionDomains->remove(iter);
     return true;
 }
 

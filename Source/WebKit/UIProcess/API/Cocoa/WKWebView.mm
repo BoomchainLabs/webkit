@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2025 Apple Inc. All rights reserved.
+ * Copyright (C) 2014-2024 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -204,10 +204,6 @@
 
 #if ENABLE(WK_WEB_EXTENSIONS)
 #import "WKWebExtensionControllerInternal.h"
-#endif
-
-#if ENABLE(DATA_DETECTION)
-#import "DataDetectionResult.h"
 #endif
 
 #if HAVE(DIGITAL_CREDENTIALS_UI)
@@ -1982,6 +1978,9 @@ inline OptionSet<WebKit::FindOptions> toFindOptions(WKFindConfiguration *configu
 
 #if ENABLE(CONTENT_INSET_BACKGROUND_FILL)
     [self _updateFixedColorExtensionViews];
+#if PLATFORM(MAC)
+    _impl->updateContentInsetFillViews();
+#endif
 #endif
 
     auto maximumViewportInsetSize = WebCore::FloatSize(maximumViewportInset.left + additionalInsets.left() + maximumViewportInset.right, maximumViewportInset.top + additionalInsets.top() + maximumViewportInset.bottom);
@@ -5734,9 +5733,9 @@ static inline OptionSet<WebKit::FindOptions> toFindOptions(_WKFindOptions wkFind
 {
     THROW_IF_SUSPENDED;
 #if ENABLE(DATA_DETECTION)
-    _page->removeDataDetectedLinks([completion = makeBlockPtr(completion), page = WeakPtr { _page.get() }] (auto&& result) {
+    _page->removeDataDetectedLinks([completion = makeBlockPtr(completion), page = WeakPtr { _page.get() }] (auto& result) {
         if (page)
-            page->setDataDetectionResult(WTFMove(result));
+            page->setDataDetectionResult(result);
         if (completion)
             completion();
     });

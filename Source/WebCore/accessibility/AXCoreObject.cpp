@@ -49,6 +49,12 @@ bool AXCoreObject::isList() const
     return role == AccessibilityRole::List || role == AccessibilityRole::DescriptionList;
 }
 
+bool AXCoreObject::isFileUploadButton() const
+{
+    std::optional type = inputType();
+    return type ? *type == InputType::Type::File : false;
+}
+
 bool AXCoreObject::isMenuRelated() const
 {
     switch (roleValue()) {
@@ -73,6 +79,15 @@ bool AXCoreObject::isMenuItem() const
     default:
         return false;
     }
+}
+
+bool AXCoreObject::isInputImage() const
+{
+    if (roleValue() != AccessibilityRole::Button)
+        return false;
+
+    std::optional type = inputType();
+    return type ?  *type == InputType::Type::Image : false;
 }
 
 bool AXCoreObject::isControl() const
@@ -139,6 +154,7 @@ bool AXCoreObject::isImplicitlyInteractive() const
 bool AXCoreObject::isLandmark() const
 {
     switch (roleValue()) {
+    case AccessibilityRole::Form:
     case AccessibilityRole::LandmarkBanner:
     case AccessibilityRole::LandmarkComplementary:
     case AccessibilityRole::LandmarkContentInfo:
@@ -309,6 +325,22 @@ AXCoreObject* AXCoreObject::firstUnignoredChild()
 }
 #endif // ENABLE(INCLUDE_IGNORED_IN_CORE_AX_TREE)
 
+#ifndef NDEBUG
+void AXCoreObject::verifyChildrenIndexInParent(const AccessibilityChildrenVector& children) const
+{
+    if (!shouldSetChildIndexInParent()) {
+        // Due to known irregularities in how the accessibility tree is built, we don't want to
+        // do this verification for some types of objects, as it will always fail. At the time this
+        // was written, this is specifically table columns and table header containers, which insert
+        // cells as their children despite not being their "true" parent.
+        return;
+    }
+
+    for (unsigned i = 0; i < children.size(); i++)
+        ASSERT(children[i]->indexInParent() == i);
+}
+#endif
+
 AXCoreObject* AXCoreObject::nextInPreOrder(bool updateChildrenIfNeeded, AXCoreObject* stayWithin)
 {
     const auto& children = childrenIncludingIgnored(updateChildrenIfNeeded);
@@ -364,6 +396,20 @@ AXCoreObject* AXCoreObject::deepestLastChildIncludingIgnored(bool updateChildren
     return deepestChild.ptr();
 }
 
+size_t AXCoreObject::indexInSiblings(const AccessibilityChildrenVector& siblings) const
+{
+    unsigned indexOfThis = indexInParent();
+    if (indexOfThis >= siblings.size() || siblings[indexOfThis]->objectID() != objectID()) [[unlikely]] {
+        // If this happens, the accessibility tree is an incorrect state.
+        ASSERT_NOT_REACHED();
+
+        return siblings.findIf([this] (const Ref<AXCoreObject>& object) {
+            return object.ptr() == this;
+        });
+    }
+    return indexOfThis;
+}
+
 AXCoreObject* AXCoreObject::nextSiblingIncludingIgnored(bool updateChildrenIfNeeded) const
 {
     RefPtr parent = parentObject();
@@ -371,9 +417,7 @@ AXCoreObject* AXCoreObject::nextSiblingIncludingIgnored(bool updateChildrenIfNee
         return nullptr;
 
     const auto& siblings = parent->childrenIncludingIgnored(updateChildrenIfNeeded);
-    size_t indexOfThis = siblings.findIf([this] (const Ref<AXCoreObject>& object) {
-        return object.ptr() == this;
-    });
+    size_t indexOfThis = indexInSiblings(siblings);
     if (indexOfThis == notFound)
         return nullptr;
 
@@ -387,9 +431,7 @@ AXCoreObject* AXCoreObject::previousSiblingIncludingIgnored(bool updateChildrenI
         return nullptr;
 
     const auto& siblings = parent->childrenIncludingIgnored(updateChildrenIfNeeded);
-    size_t indexOfThis = siblings.findIf([this] (const Ref<AXCoreObject>& object) {
-        return object.ptr() == this;
-    });
+    size_t indexOfThis = indexInSiblings(siblings);
     if (indexOfThis == notFound)
         return nullptr;
 
@@ -759,6 +801,18 @@ bool AXCoreObject::isActiveDescendantOfFocusedContainer() const
     return false;
 }
 
+// ARIA spec: User agents must not expose the aria-roledescription property if the element to which aria-roledescription is applied does not have a valid WAI-ARIA role or does not have an implicit WAI-ARIA role semantic.
+bool AXCoreObject::supportsARIARoleDescription() const
+{
+    switch (roleValue()) {
+    case AccessibilityRole::Generic:
+    case AccessibilityRole::Unknown:
+        return false;
+    default:
+        return true;
+    }
+}
+
 bool AXCoreObject::supportsRangeValue() const
 {
     return isProgressIndicator()
@@ -803,6 +857,12 @@ bool AXCoreObject::isRootWebArea() const
     RefPtr parent = parentObject();
     // If the parent is a scroll area, and the scroll area has no parent, we are at the root web area.
     return parent && parent->roleValue() == AccessibilityRole::ScrollArea && !parent->parentObject();
+}
+
+bool AXCoreObject::isRadioInput() const
+{
+    std::optional type = inputType();
+    return type ? *type == InputType::Type::Radio : false;
 }
 
 String AXCoreObject::popupValue() const
@@ -1008,9 +1068,36 @@ bool AXCoreObject::containsOnlyStaticText() const
     return hasText && !nonTextDescendant;
 }
 
+String AXCoreObject::roleDescription()
+{
+    if (hasAttachmentTag())
+        return AXAttachmentRoleText();
+
+    // aria-roledescription takes precedence over any other rule.
+    if (supportsARIARoleDescription()) {
+        auto roleDescription = ariaRoleDescription();
+        if (!roleDescription.isEmpty())
+            return roleDescription;
+    }
+
+    auto roleDescription = rolePlatformDescription();
+    if (!roleDescription.isEmpty())
+        return roleDescription;
+
+    if (roleValue() == AccessibilityRole::Figure)
+        return AXFigureText();
+
+    if (roleValue() == AccessibilityRole::Suggestion)
+        return AXSuggestionRoleDescriptionText();
+
+    return { };
+}
+
 String AXCoreObject::ariaLandmarkRoleDescription() const
 {
     switch (roleValue()) {
+    case AccessibilityRole::Form:
+        return AXARIAContentGroupText("ARIALandmarkForm"_s);
     case AccessibilityRole::LandmarkBanner:
         return AXARIAContentGroupText("ARIALandmarkBanner"_s);
     case AccessibilityRole::LandmarkComplementary:

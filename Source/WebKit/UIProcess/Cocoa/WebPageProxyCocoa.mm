@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2025 Apple Inc. All rights reserved.
+ * Copyright (C) 2014-2023 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,6 +27,7 @@
 #import "WebPageProxy.h"
 
 #import "APIAttachment.h"
+#import "APINavigation.h"
 #import "APIPageConfiguration.h"
 #import "APIUIClient.h"
 #import "AppleMediaServicesUISPI.h"
@@ -190,9 +191,9 @@ void WebPageProxy::layerTreeCommitComplete()
 
 #if ENABLE(DATA_DETECTION)
 
-void WebPageProxy::setDataDetectionResult(DataDetectionResult&& dataDetectionResult)
+void WebPageProxy::setDataDetectionResult(const DataDetectionResult& dataDetectionResult)
 {
-    m_dataDetectionResults = WTFMove(dataDetectionResult.results);
+    m_dataDetectionResults = dataDetectionResult.results;
 }
 
 void WebPageProxy::handleClickForDataDetectionResult(const DataDetectorElementInfo& info, const IntPoint& clickLocation)
@@ -228,32 +229,38 @@ std::optional<IPC::AsyncReplyID> WebPageProxy::grantAccessToCurrentPasteboardDat
     return WebPasteboardProxy::singleton().grantAccessToCurrentData(m_legacyMainFrameProcess, pasteboardName, WTFMove(completionHandler));
 }
 
-void WebPageProxy::beginSafeBrowsingCheck(const URL& url, bool forMainFrameNavigation, WebFramePolicyListenerProxy& listener)
+void WebPageProxy::beginSafeBrowsingCheck(const URL& url, RefPtr<API::Navigation> navigation, WebFrameProxy& frame)
 {
 #if HAVE(SAFE_BROWSING)
-    if (!url.isValid())
-        return listener.didReceiveSafeBrowsingResults({ });
-    RetainPtr context = [SSBLookupContext sharedLookupContext];
-    if (!context)
-        return listener.didReceiveSafeBrowsingResults({ });
-    [context lookUpURL:url.createNSURL().get() completionHandler:makeBlockPtr([listener = Ref { listener }, forMainFrameNavigation, url = url] (SSBLookupResult *result, NSError *error) mutable {
-        RunLoop::protectedMain()->dispatch([listener = WTFMove(listener), result = retainPtr(result), error = retainPtr(error), forMainFrameNavigation, url = WTFMove(url)] {
-            if (error) {
-                listener->didReceiveSafeBrowsingResults({ });
+    SSBLookupContext *context = [SSBLookupContext sharedLookupContext];
+    if (!url.isValid() || !context)
+        return;
+    size_t redirectChainIndex = navigation->redirectChainIndex(url);
+
+    if (navigation)
+        navigation->setSafeBrowsingCheckOngoing(redirectChainIndex, true);
+
+    auto completionHandler = makeBlockPtr([navigation = WTFMove(navigation), forMainFrameNavigation = frame.isMainFrame(), url, weakThis = WeakPtr { *this }, frame = Ref { frame }, redirectChainIndex] (SSBLookupResult *result, NSError *error) mutable {
+        RunLoop::protectedMain()->dispatch([frame = WTFMove(frame), navigation = WTFMove(navigation), result = retainPtr(result), error = retainPtr(error), forMainFrameNavigation, url = WTFMove(url), weakThis, redirectChainIndex] {
+            if (!navigation)
                 return;
-            }
+            navigation->setSafeBrowsingCheckOngoing(redirectChainIndex, false);
+            if (error)
+                return;
 
             for (SSBServiceLookupResult *lookupResult in [result serviceLookupResults]) {
                 if (lookupResult.isPhishing || lookupResult.isMalware || lookupResult.isUnwantedSoftware) {
-                    listener->didReceiveSafeBrowsingResults(BrowsingWarning::create(url, forMainFrameNavigation, BrowsingWarning::SafeBrowsingWarningData { lookupResult }));
+                    navigation->setSafeBrowsingWarning(BrowsingWarning::create(url, forMainFrameNavigation, BrowsingWarning::SafeBrowsingWarningData { lookupResult }));
                     return;
                 }
             }
-            listener->didReceiveSafeBrowsingResults({ });
         });
-    }).get()];
-#else
-    listener.didReceiveSafeBrowsingResults({ });
+    });
+
+    if ([context respondsToSelector:@selector(lookUpURL:isMainFrame:hasHighConfidenceOfSafety:completionHandler:)])
+        [context lookUpURL:url.createNSURL().get() isMainFrame:frame.isMainFrame() hasHighConfidenceOfSafety:NO completionHandler:completionHandler.get()];
+    else
+        [context lookUpURL:url.createNSURL().get() completionHandler:completionHandler.get()];
 #endif
 }
 

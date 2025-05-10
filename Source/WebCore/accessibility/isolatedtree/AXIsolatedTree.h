@@ -84,6 +84,7 @@ enum class AXPropertyFlag : uint32_t {
 };
 
 enum class AXProperty : uint16_t {
+    ARIARoleDescription,
 #if !ENABLE(AX_THREAD_TEXT_APIS)
     // Rather than caching text content as property when ENABLE(AX_THREAD_TEXT_APIS), we should
     // synthesize it on-the-fly using AXProperty::TextRuns.
@@ -146,6 +147,7 @@ enum class AXProperty : uint16_t {
     HasLinethrough,
     HasPlainText,
     HasRemoteFrameChild,
+    InputType,
     IsSubscript,
     IsSuperscript,
     HasTextShadow,
@@ -170,12 +172,9 @@ enum class AXProperty : uint16_t {
     IsExposable,
     IsExposedTableCell,
     IsFieldset,
-    IsFileUploadButton,
     IsIgnored,
     IsIndeterminate,
     IsInlineText,
-    IsRadioInput,
-    IsInputImage,
     IsKeyboardFocusable,
     IsMathElement,
     IsMathFraction,
@@ -236,14 +235,19 @@ enum class AXProperty : uint16_t {
     OuterHTML,
     Path,
     PlaceholderValue,
+#if PLATFORM(COCOA)
+    PlatformWidget,
+#endif
     PosInSet,
     PreventKeyboardDOMEventDispatch,
     RadioButtonGroup,
     RelativeFrame,
     RemoteFrameOffset,
     RemoteFramePlatformElement,
+#if PLATFORM(COCOA)
+    RemoteParent,
+#endif
     RolePlatformString,
-    RoleDescription,
     Rows,
     RowHeader,
     RowHeaders,
@@ -298,9 +302,10 @@ using AXPropertySet = HashSet<AXProperty, IntHash<AXProperty>, WTF::StrongEnumHa
 using AXIDAndCharacterRange = std::pair<Markable<AXID>, CharacterRange>;
 
 // If this type is modified, the switchOn statment in AXIsolatedObject::setProperty must be updated as well.
-using AXPropertyValueVariant = Variant<std::nullptr_t, Markable<AXID>, String, bool, int, unsigned, double, float, uint64_t, WallTime, DateComponentsType, AccessibilityButtonState, Color, std::shared_ptr<URL>, LayoutRect, FloatPoint, FloatRect, IntPoint, IntRect, std::pair<unsigned, unsigned>, std::optional<unsigned>, Vector<AccessibilityText>, Vector<AXID>, Vector<std::pair<Markable<AXID>, Markable<AXID>>>, Vector<String>, std::shared_ptr<Path>, OptionSet<AXAncestorFlag>, Vector<Vector<Markable<AXID>>>, CharacterRange, std::shared_ptr<AXIDAndCharacterRange>, TagName, std::optional<AccessibilityOrientation>
+using AXPropertyValueVariant = Variant<std::nullptr_t, Markable<AXID>, String, bool, int, unsigned, double, float, uint64_t, WallTime, DateComponentsType, AccessibilityButtonState, Color, std::shared_ptr<URL>, LayoutRect, FloatPoint, FloatRect, InputType::Type, IntPoint, IntRect, std::pair<unsigned, unsigned>, std::optional<unsigned>, Vector<AccessibilityText>, Vector<AXID>, Vector<std::pair<Markable<AXID>, Markable<AXID>>>, Vector<String>, std::shared_ptr<Path>, OptionSet<AXAncestorFlag>, Vector<Vector<Markable<AXID>>>, CharacterRange, std::shared_ptr<AXIDAndCharacterRange>, TagName, std::optional<AccessibilityOrientation>
 #if PLATFORM(COCOA)
     , RetainPtr<NSAttributedString>
+    , RetainPtr<NSView>
     , RetainPtr<id>
     , OptionSet<SpeakAs>
 #endif // PLATFORM(COCOA)

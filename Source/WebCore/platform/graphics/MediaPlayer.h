@@ -876,7 +876,7 @@ private:
     ProcessIdentity m_processIdentity;
 #if USE(AVFOUNDATION)
     bool m_preferDecompressionSession { false };
-    bool m_canFallbackToDecompressionSession { false };
+    bool m_videoRendererProtectedFallbackDisabled { true };
 #endif
 
 #if PLATFORM(IOS_FAMILY)

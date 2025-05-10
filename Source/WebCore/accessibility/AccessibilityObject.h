@@ -121,16 +121,15 @@ public:
     virtual bool isSearchField() const { return false; }
     bool isAttachment() const override { return false; }
     bool isMediaTimeline() const { return false; }
-    bool isFileUploadButton() const final;
-    bool isInputImage() const override { return false; }
     virtual bool isSliderThumb() const { return false; }
-    bool isRadioInput() const override { return false; }
     bool isLabel() const { return isAccessibilityLabelInstance() || labelForObjects().size(); }
+
+    std::optional<InputType::Type> inputType() const final;
 
     virtual bool isListInstance() const { return false; }
     virtual bool isUnorderedList() const { return false; }
     virtual bool isOrderedList() const { return false; }
-    virtual bool isDescriptionList() const { return false; }
+    bool isDescriptionList() const override { return false; }
 
     // Table support.
     bool isTable() const override { return false; }
@@ -190,7 +189,7 @@ public:
     bool isStyleFormatGroup() const;
     bool isFigureElement() const;
     bool isKeyboardFocusable() const final;
-    bool isOutput() const;
+    bool isOutput() const final;
 
     bool isChecked() const override { return false; }
     bool isEnabled() const override { return false; }
@@ -270,7 +269,6 @@ public:
     WEBCORE_EXPORT static bool isARIAControl(AccessibilityRole);
     bool supportsCheckedState() const override;
 
-    bool supportsARIARoleDescription() const;
     bool supportsARIAOwns() const override { return false; }
 
     String explicitPopupValue() const final;
@@ -431,8 +429,9 @@ public:
     SRGBA<uint8_t> colorValue() const override;
 
     virtual AccessibilityRole determineAccessibilityRole() = 0;
-    String roleDescription() override;
     String subrolePlatformString() const final;
+
+    String ariaRoleDescription() const final { return getAttributeTrimmed(HTMLNames::aria_roledescriptionAttr); };
 
     AXObjectCache* axObjectCache() const override;
 
@@ -476,7 +475,7 @@ public:
 
     IntPoint remoteFrameOffset() const final;
 #if PLATFORM(COCOA)
-    RemoteAXObjectRef remoteParentObject() const final;
+    RetainPtr<RemoteAXObjectRef> remoteParent() const final;
     FloatRect convertRectToPlatformSpace(const FloatRect&, AccessibilityConversionSpace) const final;
     RetainPtr<id> remoteFramePlatformElement() const override { return nil; }
 #endif
@@ -898,7 +897,6 @@ protected:
 
     virtual bool shouldIgnoreAttributeRole() const { return false; }
     virtual AccessibilityRole buttonRoleType() const;
-    String rolePlatformDescription();
     bool dispatchTouchEvent();
 
     static bool isARIAInput(AccessibilityRole);
@@ -907,6 +905,11 @@ protected:
 
     bool allowsTextRanges() const;
     unsigned getLengthForTextRange() const;
+
+#ifndef NDEBUG
+    void verifyChildrenIndexInParent() const final { return AXCoreObject::verifyChildrenIndexInParent(m_children); }
+#endif
+    void resetChildrenIndexInParent() const;
 
 private:
     ProcessID processID() const final { return legacyPresentingApplicationPID(); }
@@ -932,19 +935,19 @@ private:
 
 protected: // FIXME: Make the data members private.
     AccessibilityChildrenVector m_children;
-    mutable bool m_childrenInitialized { false };
 private:
-    OptionSet<AXAncestorFlag> m_ancestorFlags;
-    AccessibilityObjectInclusion m_lastKnownIsIgnoredValue { AccessibilityObjectInclusion::DefaultBehavior };
 #if PLATFORM(IOS_FAMILY)
     InlineTextPrediction m_lastPresentedTextPrediction;
     InlineTextPrediction m_lastPresentedTextPredictionComplete;
 #endif
+    OptionSet<AXAncestorFlag> m_ancestorFlags;
+    AccessibilityObjectInclusion m_lastKnownIsIgnoredValue { AccessibilityObjectInclusion::DefaultBehavior };
 protected: // FIXME: Make the data members private.
     // FIXME: This can be replaced by AXAncestorFlags.
     AccessibilityIsIgnoredFromParentData m_isIgnoredFromParentData;
     bool m_childrenDirty { false };
     bool m_subtreeDirty { false };
+    mutable bool m_childrenInitialized { false };
 };
 
 inline bool AccessibilityObject::hasDisplayContents() const

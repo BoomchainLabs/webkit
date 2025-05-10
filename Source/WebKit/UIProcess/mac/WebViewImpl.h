@@ -531,7 +531,7 @@ public:
     void setInspectorAttachmentView(NSView *);
     RetainPtr<NSView> inspectorAttachmentView();
     
-    void showShareSheet(WebCore::ShareDataWithParsedURL&&, WTF::CompletionHandler<void(bool)>&&, WKWebView *);
+    void showShareSheet(const WebCore::ShareDataWithParsedURL&, WTF::CompletionHandler<void(bool)>&&, WKWebView *);
     void shareSheetDidDismiss(WKShareSheet *);
 
 #if HAVE(DIGITAL_CREDENTIALS_UI)
@@ -791,6 +791,7 @@ public:
 
 #if ENABLE(CONTENT_INSET_BACKGROUND_FILL)
     void updateContentInsetFillViews();
+    WKNSContentInsetFillView *topContentInsetFillView() const { return m_topContentInsetFillView.get(); }
 #endif
 
 private:

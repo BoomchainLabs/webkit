@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2025 Apple Inc. All rights reserved.
+ * Copyright (C) 2014-2024 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -442,7 +442,7 @@ static void trySOAuthorization(Ref<API::NavigationAction>&& navigationAction, We
 #endif
 }
 
-#if USE(APPLE_INTERNAL_SDK) && HAVE(MARKETPLACE_KIT)
+#if HAVE(MARKETPLACE_KIT)
 
 static bool isMarketplaceKitURL(const URL& url)
 {
@@ -487,16 +487,16 @@ static void interceptMarketplaceKitNavigation(Ref<API::NavigationAction>&& actio
     }).get()];
 }
 
-#endif // USE(APPLE_INTERNAL_SDK) && HAVE(MARKETPLACE_KIT)
+#endif // HAVE(MARKETPLACE_KIT)
 
 static void tryInterceptNavigation(Ref<API::NavigationAction>&& navigationAction, WebPageProxy& page, WTF::Function<void(bool)>&& completionHandler)
 {
-#if USE(APPLE_INTERNAL_SDK) && HAVE(MARKETPLACE_KIT)
+#if HAVE(MARKETPLACE_KIT)
     if (isMarketplaceKitURL(navigationAction->request().url())) {
         interceptMarketplaceKitNavigation(WTFMove(navigationAction), page);
         return completionHandler(true /* interceptedNavigation */);
     }
-#endif // USE(APPLE_INTERNAL_SDK) && HAVE(MARKETPLACE_KIT)
+#endif // HAVE(MARKETPLACE_KIT)
 
 #if HAVE(APP_LINKS)
     if (navigationAction->shouldOpenAppLinks()) {
@@ -680,13 +680,13 @@ void NavigationState::NavigationClient::decidePolicyForNavigationAction(WebPageP
                 break;
 
             case _WKNavigationActionPolicyAllowWithoutTryingAppLink:
-#if USE(APPLE_INTERNAL_SDK) && HAVE(MARKETPLACE_KIT)
+#if HAVE(MARKETPLACE_KIT)
                 if (isMarketplaceKitURL(navigationAction->request().url())) {
                     interceptMarketplaceKitNavigation(WTFMove(navigationAction), webPageProxy);
                     localListener->ignore();
                     return;
                 }
-#endif // USE(APPLE_INTERNAL_SDK) && HAVE(MARKETPLACE_KIT)
+#endif // HAVE(MARKETPLACE_KIT)
 
                 trySOAuthorization(WTFMove(navigationAction), webPageProxy, [localListener = WTFMove(localListener), websitePolicies = WTFMove(apiWebsitePolicies)] (bool optimizedLoad) {
                     if (optimizedLoad) {
@@ -856,7 +856,7 @@ void NavigationState::NavigationClient::didReceiveServerRedirectForProvisionalNa
     [navigationDelegate webView:navigationState->webView().get() didReceiveServerRedirectForProvisionalNavigation:wrapper(navigation)];
 }
 
-void NavigationState::NavigationClient::willPerformClientRedirect(WebPageProxy& page, WTF::String&& urlString, double delay)
+void NavigationState::NavigationClient::willPerformClientRedirect(WebPageProxy& page, const WTF::String& urlString, double delay)
 {
     RefPtr navigationState = m_navigationState.get();
     if (!navigationState)
@@ -869,7 +869,7 @@ void NavigationState::NavigationClient::willPerformClientRedirect(WebPageProxy& 
     if (!navigationDelegate)
         return;
 
-    URL url { WTFMove(urlString) };
+    URL url { urlString };
 
     [static_cast<id<WKNavigationDelegatePrivate>>(navigationDelegate) _webView:navigationState->webView().get() willPerformClientRedirectToURL:url.createNSURL().get() delay:delay];
 }

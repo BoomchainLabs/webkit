@@ -703,6 +703,18 @@ bool Quirks::shouldAvoidScrollingWhenFocusedContentIsVisible() const
     return needsQuirks() && m_quirksData.shouldAvoidScrollingWhenFocusedContentIsVisibleQuirk;
 }
 
+// Some input only specify image/* as an acceptable type, which is failing sometimes for certains domain names
+// which do not support HEIC.
+bool Quirks::shouldTranscodeHeicImagesForURL(const URL& url)
+{
+    auto quirksDomain = RegistrableDomain(url);
+    // zillow.com rdar://79872092
+    if (quirksDomain.string() == "zillow.com"_s)
+        return true;
+
+    return false;
+}
+
 // att.com rdar://55185021
 bool Quirks::shouldUseLegacySelectPopoverDismissalBehaviorInDataActivation() const
 {
@@ -1242,12 +1254,6 @@ bool Quirks::shouldDisableFullscreenVideoAspectRatioAdaptiveSizing() const
 }
 #endif
 
-bool Quirks::shouldEnableApplicationCacheQuirk() const
-{
-    // FIXME: Remove this when deleting ApplicationCache APIs.
-    return false;
-}
-
 // play.hbomax.com https://bugs.webkit.org/show_bug.cgi?id=244737
 bool Quirks::shouldEnableFontLoadingAPIQuirk() const
 {
@@ -1420,9 +1426,6 @@ bool Quirks::shouldFlipScreenDimensions() const
 bool Quirks::needsIPadMiniUserAgent(const URL& url)
 {
     auto host = url.host();
-
-    if (host == "huya.com"_s || host.endsWith(".huya.com"_s))
-        return true;
 
     if (host == "cctv.com"_s || host.endsWith(".cctv.com"_s))
         return true;

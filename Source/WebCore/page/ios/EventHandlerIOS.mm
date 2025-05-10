@@ -50,6 +50,9 @@
 #import "Pasteboard.h"
 #import "PlatformEventFactoryIOS.h"
 #import "PlatformKeyboardEvent.h"
+#import "RemoteFrame.h"
+#import "RemoteFrameGeometryTransformer.h"
+#import "RemoteFrameView.h"
 #import "RenderWidgetInlines.h"
 #import "RenderObjectInlines.h"
 #import "ScrollingCoordinatorTypes.h"
@@ -579,7 +582,7 @@ HandleUserInputEventResult EventHandler::passMouseReleaseEventToSubframe(MouseEv
 
 OptionSet<PlatformEvent::Modifier> EventHandler::accessKeyModifiers()
 {
-    // Control+Option key combinations are usually unused on Mac OS X, but not when VoiceOver is enabled.
+    // Control+Option key combinations are usually unused on macOS, but not when VoiceOver is enabled.
     // So, we use Control in this case, even though it conflicts with Emacs-style key bindings.
     // See <https://bugs.webkit.org/show_bug.cgi?id=21107> for more detail.
     if (AXObjectCache::accessibilityEnhancedUserInterfaceEnabled())
@@ -726,6 +729,11 @@ std::optional<ElementIdentifier> EventHandler::requestInteractiveModelElementAtP
     auto documentPoint = frameView->windowToContents(syntheticMousePressEvent.position());
     auto hitTestedMouseEvent = document->prepareMouseEvent(hitType, documentPoint, syntheticMousePressEvent);
 
+    if (RefPtr subframe = dynamicDowncast<LocalFrame>(subframeForHitTestResult(hitTestedMouseEvent))) {
+        if (std::optional<ElementIdentifier> elementID = subframe->eventHandler().requestInteractiveModelElementAtPoint(adjustedClientPosition))
+            return elementID;
+    }
+
     RefPtr targetElement = hitTestedMouseEvent.hitTestResult().targetElement();
     if (RefPtr modelElement = dynamicDowncast<HTMLModelElement>(targetElement)) {
         if (modelElement->supportsStageModeInteraction()) {
@@ -788,7 +796,7 @@ bool EventHandler::eventLoopHandleMouseDragged(const MouseEventWithHitTestResult
     return false;
 }
 
-void EventHandler::tryToBeginDragAtPoint(const IntPoint& clientPosition, const IntPoint&, CompletionHandler<void(bool)>&& completionHandler)
+void EventHandler::tryToBeginDragAtPoint(const IntPoint& clientPosition, const IntPoint&, CompletionHandler<void(Expected<bool, RemoteFrameGeometryTransformer>)>&& completionHandler)
 {
     Ref frame = m_frame.get();
 
@@ -809,12 +817,18 @@ void EventHandler::tryToBeginDragAtPoint(const IntPoint& clientPosition, const I
     PlatformMouseEvent syntheticMouseMoveEvent(adjustedClientPosition, adjustedGlobalPosition, MouseButton::Left, PlatformEvent::Type::MouseMoved, 0, { }, WallTime::now(), 0, SyntheticClickType::NoTap);
 
     constexpr OptionSet<HitTestRequest::Type> hitType { HitTestRequest::Type::Active, HitTestRequest::Type::DisallowUserAgentShadowContent };
-    auto documentPoint = frame->view() ? frame->view()->windowToContents(syntheticMouseMoveEvent.position()) : syntheticMouseMoveEvent.position();
+    RefPtr frameView = frame->view();
+    auto documentPoint = frameView ? frameView->windowToContents(syntheticMouseMoveEvent.position()) : syntheticMouseMoveEvent.position();
     auto hitTestedMouseEvent = document->prepareMouseEvent(hitType, documentPoint, syntheticMouseMoveEvent);
 
-    auto subframe = dynamicDowncast<LocalFrame>(subframeForHitTestResult(hitTestedMouseEvent));
-    if (subframe)
-        return subframe->eventHandler().tryToBeginDragAtPoint(adjustedClientPosition, adjustedGlobalPosition, WTFMove(completionHandler));
+    if (RefPtr subframe = subframeForHitTestResult(hitTestedMouseEvent)) {
+        if (RefPtr localSubframe = dynamicDowncast<LocalFrame>(subframe.get()))
+            return localSubframe->eventHandler().tryToBeginDragAtPoint(adjustedClientPosition, adjustedGlobalPosition, WTFMove(completionHandler));
+        if (RefPtr remoteSubframe = dynamicDowncast<RemoteFrame>(subframe.get())) {
+            if (RefPtr remoteFrameView = remoteSubframe->view(); remoteFrameView && frameView)
+                return completionHandler(makeUnexpected(RemoteFrameGeometryTransformer(remoteFrameView.releaseNonNull(), frameView.releaseNonNull(), remoteSubframe->frameID())));
+        }
+    }
 
     if (!eventMayStartDrag(syntheticMousePressEvent))
         return completionHandler(false);

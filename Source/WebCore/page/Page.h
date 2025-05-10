@@ -738,7 +738,7 @@ public:
 #if ENABLE(WEB_AUTHN)
     AuthenticatorCoordinator& authenticatorCoordinator() { return m_authenticatorCoordinator.get(); }
 #if HAVE(DIGITAL_CREDENTIALS_UI)
-    CredentialRequestCoordinator& credentialRequestCoordinator() { return *m_credentialRequestCoordinator; }
+    CredentialRequestCoordinator& credentialRequestCoordinator() { return m_credentialRequestCoordinator.get(); }
 #endif
 #endif
 
@@ -1306,6 +1306,11 @@ public:
     WEBCORE_EXPORT void setPresentingApplicationBundleIdentifier(String&&);
 #endif
 
+#if ENABLE(MODEL_ELEMENT)
+    bool shouldDisableModelLoadDelaysForTesting() const { return m_modelLoadDelaysDisabledForTesting; }
+    void disableModelLoadDelaysForTesting() { m_modelLoadDelaysDisabledForTesting = true; }
+#endif
+
 private:
     explicit Page(PageConfiguration&&);
 
@@ -1639,7 +1644,7 @@ private:
     const UniqueRef<AuthenticatorCoordinator> m_authenticatorCoordinator;
 
 #if HAVE(DIGITAL_CREDENTIALS_UI)
-    const RefPtr<CredentialRequestCoordinator> m_credentialRequestCoordinator;
+    const Ref<CredentialRequestCoordinator> m_credentialRequestCoordinator;
 #endif
 
 #endif // ENABLE(WEB_AUTHN)
@@ -1755,6 +1760,10 @@ private:
 
 #if PLATFORM(COCOA)
     String m_presentingApplicationBundleIdentifier;
+#endif
+
+#if ENABLE(MODEL_ELEMENT)
+    bool m_modelLoadDelaysDisabledForTesting { false };
 #endif
 }; // class Page
 

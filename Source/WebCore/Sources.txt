@@ -297,6 +297,7 @@ Modules/model-element/ModelPlayer.cpp
 Modules/model-element/ModelPlayerAnimationState.cpp
 Modules/model-element/ModelPlayerClient.cpp
 Modules/model-element/ModelPlayerProvider.cpp
+Modules/model-element/PlaceholderModelPlayer.cpp
 Modules/model-element/dummy/DummyModelPlayer.cpp
 Modules/model-element/dummy/DummyModelPlayerProvider.cpp
 Modules/notifications/Notification.cpp
@@ -2040,7 +2041,6 @@ loader/appcache/ApplicationCacheManifestParser.cpp
 loader/appcache/ApplicationCacheResource.cpp
 loader/appcache/ApplicationCacheResourceLoader.cpp
 loader/appcache/ApplicationCacheStorage.cpp
-loader/appcache/DOMApplicationCache.cpp
 loader/archive/Archive.cpp
 loader/archive/ArchiveFactory.cpp
 loader/archive/ArchiveResource.cpp
@@ -2786,7 +2786,6 @@ rendering/CounterNode.cpp
 rendering/EllipsisBoxPainter.cpp
 rendering/EventRegion.cpp
 rendering/FixedTableLayout.cpp
-rendering/FlexibleBoxAlgorithm.cpp
 rendering/FloatingObjects.cpp
 rendering/Grid.cpp
 rendering/GridBaselineAlignment.cpp
@@ -3710,7 +3709,6 @@ JSCustomElementRegistry.cpp
 JSCustomEvent.cpp
 JSCustomStateSet.cpp
 JSCurrentUserDetailsOptions.cpp
-JSDOMApplicationCache.cpp
 JSDOMAudioSession.cpp
 JSDOMCSSCustomPropertyDescriptor.cpp
 JSDOMCSSNamespace.cpp

@@ -671,6 +671,11 @@ void AccessibilityObject::insertChild(AccessibilityObject& child, unsigned index
     }
 #endif // USE(ATSPI)
 
+    auto insert = [this] (Ref<AXCoreObject>&& object, unsigned index) {
+        std::ignore = setChildIndexInParent(object.get(), index);
+        m_children.insert(index, WTFMove(object));
+    };
+
     auto thisAncestorFlags = computeAncestorFlags();
     child.initializeAncestorFlags(thisAncestorFlags);
     setIsIgnoredFromParentDataForChild(child);
@@ -687,7 +692,7 @@ void AccessibilityObject::insertChild(AccessibilityObject& child, unsigned index
                 // Calls to `child.isIgnored()` or `child.children()` can cause layout, which in turn can cause this object to clear its m_children. This can cause `insertionIndex` to no longer be valid. Detect this and break early if necessary.
                 if (insertionIndex > m_children.size())
                     break;
-                m_children.insert(insertionIndex, grandchild);
+                insert(WTFMove(grandchild), insertionIndex);
                 ++insertionIndex;
             }
         }
@@ -695,13 +700,27 @@ void AccessibilityObject::insertChild(AccessibilityObject& child, unsigned index
         // Table component child-parent relationships often don't line up properly, hence the need for methods
         // like parentTable() and parentRow(). Exclude them from this ASSERT.
         ASSERT(isTableComponent(child) || isTableComponent(*this) || child.parentObject() == this);
-        m_children.insert(index, child);
+        insert(Ref { child }, index);
     }
     
     // Reset the child's m_isIgnoredFromParentData since we are done adding that child and its children.
     child.clearIsIgnoredFromParentData();
 }
-    
+
+void AccessibilityObject::resetChildrenIndexInParent() const
+{
+    if (!shouldSetChildIndexInParent())
+        return;
+
+    unsigned index = 0;
+    for (const auto& child : m_children) {
+        bool didSet = setChildIndexInParent(child.get(), index);
+        // We check shouldSetChildIndexInParent above, so this should always be true.
+        ASSERT_UNUSED(didSet, didSet);
+        ++index;
+    }
+}
+
 AXCoreObject::AccessibilityChildrenVector AccessibilityObject::findMatchingObjects(AccessibilitySearchCriteria&& criteria)
 {
     if (auto* cache = axObjectCache())
@@ -2110,7 +2129,7 @@ const AccessibilityScrollView* AccessibilityObject::ancestorAccessibilityScrollV
 }
 
 #if PLATFORM(COCOA)
-RemoteAXObjectRef AccessibilityObject::remoteParentObject() const
+RetainPtr<RemoteAXObjectRef> AccessibilityObject::remoteParent() const
 {
     auto* document = this->document();
     auto* frame = document ? document->frame() : nullptr;
@@ -2798,12 +2817,6 @@ SRGBA<uint8_t> AccessibilityObject::colorValue() const
 }
 
 #if !PLATFORM(MAC)
-String AccessibilityObject::rolePlatformDescription()
-{
-    // FIXME: implement in other platforms.
-    return String();
-}
-
 String AccessibilityObject::subrolePlatformString() const
 {
     return String();
@@ -2817,40 +2830,6 @@ String AccessibilityObject::embeddedImageDescription() const
         return { };
 
     return renderImage->accessibilityDescription();
-}
-
-// ARIA spec: User agents must not expose the aria-roledescription property if the element to which aria-roledescription is applied does not have a valid WAI-ARIA role or does not have an implicit WAI-ARIA role semantic.
-bool AccessibilityObject::supportsARIARoleDescription() const
-{
-    switch (roleValue()) {
-    case AccessibilityRole::Generic:
-    case AccessibilityRole::Unknown:
-        return false;
-    default:
-        return true;
-    }
-}
-
-String AccessibilityObject::roleDescription()
-{
-    // aria-roledescription takes precedence over any other rule.
-    if (supportsARIARoleDescription()) {
-        auto roleDescription = getAttributeTrimmed(aria_roledescriptionAttr);
-        if (!roleDescription.isEmpty())
-            return roleDescription;
-    }
-
-    auto roleDescription = rolePlatformDescription();
-    if (!roleDescription.isEmpty())
-        return roleDescription;
-
-    if (roleValue() == AccessibilityRole::Figure)
-        return AXFigureText();
-
-    if (roleValue() == AccessibilityRole::Suggestion)
-        return AXSuggestionRoleDescriptionText();
-
-    return { };
 }
 
 bool AccessibilityObject::supportsDatetimeAttribute() const
@@ -3840,10 +3819,11 @@ AccessibilityRole AccessibilityObject::buttonRoleType() const
     return AccessibilityRole::Button;
 }
 
-bool AccessibilityObject::isFileUploadButton() const
+std::optional<InputType::Type> AccessibilityObject::inputType() const
 {
     RefPtr input = dynamicDowncast<HTMLInputElement>(node());
-    return input && input->isFileUpload();
+    RefPtr inputType = input ? input->inputType() : nullptr;
+    return inputType ? std::optional(inputType->type()) : std::nullopt;
 }
 
 bool AccessibilityObject::isIgnoredByDefault() const

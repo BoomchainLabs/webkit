@@ -205,11 +205,10 @@ private:
     // Attribute retrieval overrides.
     bool isSecureField() const final { return boolAttributeValue(AXProperty::IsSecureField); }
     bool isAttachment() const final { return boolAttributeValue(AXProperty::IsAttachment); }
-    bool isInputImage() const final { return boolAttributeValue(AXProperty::IsInputImage); }
-    bool isRadioInput() const final { return boolAttributeValue(AXProperty::IsRadioInput); }
 
     bool isKeyboardFocusable() const final { return boolAttributeValue(AXProperty::IsKeyboardFocusable); }
-    
+    bool isOutput() const final { return propertyValue<TagName>(AXProperty::TagName) == TagName::output; }
+
     // Table support.
     AXIsolatedObject* exposedTableAncestor(bool includeSelf = false) const final { return Accessibility::exposedTableAncestor(*this, includeSelf); }
     AccessibilityChildrenVector columns() final { return tree()->objectsForIDs(vectorAttributeValue<AXID>(AXProperty::Columns)); }
@@ -259,7 +258,8 @@ private:
     bool isVisited() const final { return boolAttributeValue(AXProperty::IsVisited); }
     bool isRequired() const final { return boolAttributeValue(AXProperty::IsRequired); }
     bool isExpanded() const final { return boolAttributeValue(AXProperty::IsExpanded); }
-    bool isFileUploadButton() const final { return boolAttributeValue(AXProperty::IsFileUploadButton); }
+    bool isDescriptionList() const { return propertyValue<TagName>(AXProperty::TagName) == TagName::dl; }
+    std::optional<InputType::Type> inputType() const final { return optionalAttributeValue<InputType::Type>(AXProperty::InputType); };
     FloatPoint screenRelativePosition() const final;
     IntPoint remoteFrameOffset() const final;
     std::optional<IntRect> cachedRelativeFrame() const { return optionalAttributeValue<IntRect>(AXProperty::RelativeFrame); }
@@ -312,8 +312,8 @@ private:
     String expandedTextValue() const final { return stringAttributeValue(AXProperty::ExpandedTextValue); }
     bool supportsExpandedTextValue() const final { return boolAttributeValue(AXProperty::SupportsExpandedTextValue); }
     SRGBA<uint8_t> colorValue() const final;
-    String roleDescription() final { return stringAttributeValue(AXProperty::RoleDescription); }
     String subrolePlatformString() const final { return stringAttributeValue(AXProperty::SubrolePlatformString); }
+    String ariaRoleDescription() const final { return stringAttributeValue(AXProperty::ARIARoleDescription); };
     LayoutRect elementRect() const final;
     IntPoint clickPoint() final;
     void accessibilityText(Vector<AccessibilityText>& texts) const final;
@@ -547,7 +547,7 @@ private:
     bool isPlugin() const final { return boolAttributeValue(AXProperty::IsPlugin); }
 
 #if PLATFORM(COCOA)
-    RemoteAXObjectRef remoteParentObject() const final;
+    RetainPtr<RemoteAXObjectRef> remoteParent() const final;
     FloatRect convertRectToPlatformSpace(const FloatRect&, AccessibilityConversionSpace) const final;
 #endif
     Page* page() const final;
@@ -574,21 +574,24 @@ private:
     String innerHTML() const final;
     String outerHTML() const final;
 
-    // FIXME: Make this a ThreadSafeWeakPtr<AXIsolatedTree>.
-    RefPtr<AXIsolatedTree> m_cachedTree;
-    Markable<AXID> m_parentID;
-    bool m_childrenDirty { true };
+#ifndef NDEBUG
+    void verifyChildrenIndexInParent() const final { return AXCoreObject::verifyChildrenIndexInParent(m_children); }
+#endif
+
     Vector<AXID> m_childrenIDs;
     Vector<Ref<AXCoreObject>> m_children;
     AXPropertyVector m_properties;
+
+    // FIXME: Make this a ThreadSafeWeakPtr<AXIsolatedTree>.
+    RefPtr<AXIsolatedTree> m_cachedTree;
+    Markable<AXID> m_parentID;
+
     OptionSet<AXPropertyFlag> m_propertyFlags;
     // Some objects (e.g. display:contents) form their geometry through their children.
     bool m_getsGeometryFromChildren { false };
+    bool m_childrenDirty { true };
 
-#if PLATFORM(COCOA)
-    RetainPtr<NSView> m_platformWidget;
-    RetainPtr<RemoteAXObjectRef> m_remoteParent;
-#else
+#if !PLATFORM(COCOA)
     PlatformWidget m_platformWidget;
 #endif
 };

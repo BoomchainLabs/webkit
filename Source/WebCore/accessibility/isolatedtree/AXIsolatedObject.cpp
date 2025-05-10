@@ -121,6 +121,8 @@ void AXIsolatedObject::initializeProperties(const Ref<AccessibilityObject>& axOb
             setProperty(AXProperty::TagName, TagName::tbody);
         else if (tag == tfootTag)
             setProperty(AXProperty::TagName, TagName::tfoot);
+        else if (tag == outputTag)
+            setProperty(AXProperty::TagName, TagName::output);
 
         setProperty(AXProperty::TextRuns, std::make_shared<AXTextRuns>(object.textRuns()));
         setProperty(AXProperty::TextEmissionBehavior, object.textEmissionBehavior());
@@ -164,11 +166,7 @@ void AXIsolatedObject::initializeProperties(const Ref<AccessibilityObject>& axOb
     setProperty(AXProperty::IsBusy, object.isBusy());
     setProperty(AXProperty::IsExpanded, object.isExpanded());
 
-    // FIXME: These three properties, plus AXProperty::IsRadioInput below, are basically
-    // all just variations of HTMLInputElement::m_inputType. It would be better to cache
-    // just that rather than have four separate properties.
-    setProperty(AXProperty::IsFileUploadButton, object.isFileUploadButton());
-    setProperty(AXProperty::IsInputImage, object.isInputImage());
+    // FIXME: Caching isSecureField would require caching an additional property (on top of input type), so for now, let's still cache this.
     setProperty(AXProperty::IsSecureField, object.isSecureField());
 
     setProperty(AXProperty::IsIndeterminate, object.isIndeterminate());
@@ -178,7 +176,7 @@ void AXIsolatedObject::initializeProperties(const Ref<AccessibilityObject>& axOb
     setProperty(AXProperty::IsSelected, object.isSelected());
     setProperty(AXProperty::IsVisited, object.isVisited());
     setProperty(AXProperty::IsValueAutofillAvailable, object.isValueAutofillAvailable());
-    setProperty(AXProperty::RoleDescription, object.roleDescription().isolatedCopy());
+    setProperty(AXProperty::ARIARoleDescription, object.ariaRoleDescription().isolatedCopy());
     setProperty(AXProperty::SubrolePlatformString, object.subrolePlatformString().isolatedCopy());
     setProperty(AXProperty::CanSetFocusAttribute, object.canSetFocusAttribute());
     setProperty(AXProperty::CanSetValueAttribute, object.canSetValueAttribute());
@@ -224,6 +222,10 @@ void AXIsolatedObject::initializeProperties(const Ref<AccessibilityObject>& axOb
     setProperty(AXProperty::BrailleRoleDescription, object.brailleRoleDescription().isolatedCopy());
     setProperty(AXProperty::BrailleLabel, object.brailleLabel().isolatedCopy());
     setProperty(AXProperty::IsNonLayerSVGObject, object.isNonLayerSVGObject());
+
+    // Only cache input types on things that are an input.
+    if (std::optional inputType = axObject->inputType())
+        setProperty(AXProperty::InputType, *inputType);
 
     bool isWebArea = axObject->isWebArea();
     bool isScrollArea = axObject->isScrollView();
@@ -343,7 +345,6 @@ void AXIsolatedObject::initializeProperties(const Ref<AccessibilityObject>& axOb
         setProperty(AXProperty::NameAttribute, object.nameAttribute().isolatedCopy());
         // FIXME: This property doesn't get updated when a page changes dynamically.
         setObjectVectorProperty(AXProperty::RadioButtonGroup, object.radioButtonGroup());
-        setProperty(AXProperty::IsRadioInput, object.isRadioInput());
     }
 
     if (object.isImage())
@@ -643,8 +644,10 @@ void AXIsolatedObject::setProperty(AXProperty property, AXPropertyValueVariant&&
         [](OptionSet<AXAncestorFlag>& typedValue) { return typedValue.isEmpty(); },
 #if PLATFORM(COCOA)
         [](RetainPtr<NSAttributedString>& typedValue) { return !typedValue; },
+        [](RetainPtr<NSView>& typedValue) { return !typedValue; },
         [](RetainPtr<id>& typedValue) { return !typedValue; },
 #endif
+        [](InputType::Type&) { return false; },
         [](Vector<Vector<Markable<AXID>>>& typedValue) { return typedValue.isEmpty(); },
         [](CharacterRange& typedValue) { return !typedValue.location && !typedValue.length; },
         [](std::shared_ptr<AXIDAndCharacterRange>& typedValue) {
@@ -717,13 +720,21 @@ const AXCoreObject::AccessibilityChildrenVector& AXIsolatedObject::children(bool
     ASSERT(!isMainThread());
 #endif
     if (updateChildrenIfNeeded && m_childrenDirty) {
-        m_children = WTF::compactMap(m_childrenIDs, [&](auto& childID) -> std::optional<Ref<AXCoreObject>> {
-            if (RefPtr child = tree()->objectForID(childID))
+        unsigned index = 0;
+        m_children = WTF::compactMap(m_childrenIDs, [&] (auto& childID) -> std::optional<Ref<AXCoreObject>> {
+            if (RefPtr child = tree()->objectForID(childID)) {
+                if (setChildIndexInParent(*child, index))
+                    ++index;
                 return child.releaseNonNull();
+            }
             return std::nullopt;
         });
         m_childrenDirty = false;
         ASSERT(m_children.size() == m_childrenIDs.size());
+
+#ifndef NDEBUG
+        verifyChildrenIndexInParent();
+#endif
     }
     return m_children;
 }
@@ -2159,7 +2170,7 @@ Widget* AXIsolatedObject::widget() const
 PlatformWidget AXIsolatedObject::platformWidget() const
 {
 #if PLATFORM(COCOA)
-    return m_platformWidget.get();
+    return propertyValue<RetainPtr<NSView>>(AXProperty::PlatformWidget).get();
 #else
     return m_platformWidget;
 #endif
