@@ -67,7 +67,7 @@ OBJC_CLASS NSView;
 
 namespace WebCore {
 
-class AXCoreObject;
+class AXIsolatedTree;
 class AuthenticationChallenge;
 class CachedFrame;
 class CachedResourceRequest;
@@ -123,7 +123,7 @@ public:
 
     // An inline function cannot be the first non-abstract virtual function declared
     // in the class as it results in the vtable being generated as a weak symbol.
-    // This hurts performance (in Mac OS X at least, when loading frameworks), so we
+    // This hurts performance (in macOS at least, when loading frameworks), so we
     // don't want to do it in WebKit.
     virtual bool hasHTMLView() const;
 
@@ -290,7 +290,7 @@ public:
     virtual RemoteAXObjectRef accessibilityRemoteObject() = 0;
     virtual IntPoint accessibilityRemoteFrameOffset() = 0;
 #if ENABLE(ACCESSIBILITY_ISOLATED_TREE)
-    virtual void setAXIsolatedTreeRoot(AXCoreObject*) = 0;
+    virtual void setIsolatedTree(Ref<WebCore::AXIsolatedTree>&&) = 0;
 #endif
     virtual void willCacheResponse(DocumentLoader*, ResourceLoaderIdentifier, NSCachedURLResponse*, CompletionHandler<void(NSCachedURLResponse *)>&&) const = 0;
     virtual std::optional<double> dataDetectionReferenceDate() { return std::nullopt; }

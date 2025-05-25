@@ -28,6 +28,7 @@
 
 #import "GeometryUtilities.h"
 #import "GraphicsContext.h"
+#import "NativeImage.h"
 #import "PathUtilities.h"
 #import "TextIndicator.h"
 #import "TextIndicatorWindow.h"
@@ -44,7 +45,7 @@ constexpr CFTimeInterval fadeInAnimationDuration = 0.15;
 constexpr CFTimeInterval fadeOutAnimationDuration = 0.3;
 
 constexpr CGFloat borderWidth = 0;
-constexpr CGFloat cornerRadius = 0;
+constexpr CGFloat cornerRadius = 3;
 constexpr CGFloat dropShadowOffsetX = 0;
 constexpr CGFloat dropShadowOffsetY = 1;
 

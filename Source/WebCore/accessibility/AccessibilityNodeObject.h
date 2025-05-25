@@ -50,9 +50,7 @@ public:
 
     bool isBusy() const final;
     bool isDetached() const override { return !m_node; }
-    bool isRadioInput() const final;
     bool isFieldset() const final;
-    bool isInputImage() const final;
     bool isMultiSelectable() const override;
     bool isNativeImage() const;
     bool isNativeTextControl() const final;
@@ -80,7 +78,6 @@ public:
     void setFocused(bool) override;
     bool isFocused() const final;
     bool canSetFocusAttribute() const override;
-    unsigned headingLevel() const final;
 
     bool canSetValueAttribute() const override;
 
@@ -96,7 +93,6 @@ public:
     AccessibilityButtonState checkboxOrRadioValue() const final;
 
     URL url() const override;
-    unsigned hierarchicalLevel() const final;
     String textUnderElement(TextUnderElementMode = TextUnderElementMode()) const override;
     String accessibilityDescriptionForChildren() const;
     String description() const override;

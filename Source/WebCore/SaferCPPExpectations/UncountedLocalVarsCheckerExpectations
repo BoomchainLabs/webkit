@@ -68,8 +68,6 @@ Modules/webaudio/ConstantSourceNode.cpp
 Modules/webaudio/ConvolverNode.cpp
 Modules/webaudio/DynamicsCompressorNode.cpp
 Modules/webaudio/GainNode.cpp
-Modules/webaudio/MediaElementAudioSourceNode.cpp
-Modules/webaudio/MediaStreamAudioSourceNode.cpp
 Modules/webaudio/OscillatorNode.cpp
 Modules/webaudio/PannerNode.cpp
 Modules/webaudio/ScriptProcessorNode.cpp
@@ -227,14 +225,12 @@ css/CSSValue.cpp
 css/CSSValueList.cpp
 css/CSSValueList.h
 css/CSSVariableReferenceValue.cpp
-css/ComputedStyleExtractor.cpp
 css/DeprecatedCSSOMPrimitiveValue.cpp
 css/FontFaceSet.cpp
 css/FontVariantBuilder.cpp
 css/ImmutableStyleProperties.cpp
 css/MediaList.cpp
 css/MediaQueryMatcher.cpp
-css/SVGCSSComputedStyleDeclaration.cpp
 css/SelectorChecker.cpp
 css/SelectorFilter.cpp
 css/ShorthandSerializer.cpp
@@ -261,16 +257,12 @@ css/typedom/transform/CSSSkew.cpp
 css/typedom/transform/CSSTransformValue.cpp
 css/typedom/transform/CSSTranslate.cpp
 cssjit/SelectorCompiler.cpp
-dom/BroadcastChannel.cpp
 dom/CollectionIndexCacheInlines.h
-dom/CommandEvent.cpp
 dom/ComposedTreeAncestorIterator.h
 dom/ComposedTreeIterator.cpp
 dom/ComposedTreeIterator.h
 dom/ContainerNodeAlgorithms.cpp
 dom/Document.cpp
-dom/DocumentFragment.cpp
-dom/DocumentStorageAccess.cpp
 dom/Element.cpp
 dom/ElementAndTextDescendantIterator.h
 dom/ElementIteratorInlines.h
@@ -394,7 +386,6 @@ html/canvas/EXTDisjointTimerQueryWebGL2.cpp
 html/canvas/EXTPolygonOffsetClamp.cpp
 html/canvas/GPUBasedCanvasRenderingContext.cpp
 html/canvas/GPUCanvasContextCocoa.mm
-html/canvas/ImageBitmapRenderingContext.cpp
 html/canvas/OESDrawBuffersIndexed.cpp
 html/canvas/OESVertexArrayObject.cpp
 html/canvas/OffscreenCanvasRenderingContext2D.cpp
@@ -466,7 +457,6 @@ loader/WorkerThreadableLoader.cpp
 loader/appcache/ApplicationCacheGroup.cpp
 loader/appcache/ApplicationCacheHost.cpp
 loader/appcache/ApplicationCacheStorage.cpp
-loader/appcache/DOMApplicationCache.cpp
 loader/archive/cf/LegacyWebArchive.cpp
 loader/cache/CachedImage.cpp
 loader/cache/CachedResourceRequest.cpp
@@ -563,7 +553,6 @@ platform/graphics/FontCache.cpp
 platform/graphics/FontRanges.cpp
 platform/graphics/GraphicsLayer.cpp
 platform/graphics/Image.cpp
-platform/graphics/Path.cpp
 platform/graphics/SourceBrush.cpp
 platform/graphics/avfoundation/AudioSourceProviderAVFObjC.mm
 platform/graphics/avfoundation/objc/CDMInstanceFairPlayStreamingAVFObjC.mm
@@ -653,7 +642,6 @@ rendering/svg/RenderSVGShape.cpp
 rendering/svg/RenderSVGTransformableContainer.cpp
 rendering/svg/SVGRenderSupport.cpp
 rendering/svg/SVGRenderTreeAsText.cpp
-rendering/svg/SVGRenderingContext.cpp
 rendering/svg/SVGTextBoxPainter.cpp
 rendering/svg/SVGTextChunk.cpp
 rendering/svg/SVGTextLayoutAttributesBuilder.cpp
@@ -696,6 +684,8 @@ style/StyleBuilder.cpp
 style/StyleBuilderConverter.h
 style/StyleBuilderCustom.h
 style/StyleBuilderState.cpp
+style/StyleExtractor.cpp
+style/StyleExtractorCustom.h
 style/StyleInterpolationFunctions.h
 style/StyleInterpolationWrappers.h
 style/StyleInvalidationFunctions.h
@@ -728,7 +718,6 @@ svg/SVGMPathElement.cpp
 svg/SVGMaskElement.cpp
 svg/SVGSVGElement.cpp
 svg/SVGSwitchElement.cpp
-svg/SVGTextContentElement.cpp
 svg/SVGToOTFFontConversion.cpp
 svg/SVGUseElement.cpp
 svg/graphics/SVGImage.cpp

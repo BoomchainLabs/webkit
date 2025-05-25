@@ -220,6 +220,7 @@ struct EntryPointInformation {
     HashMap<String, SpecializationConstant> specializationConstants;
     Variant<Vertex, Fragment, Compute> typedEntryPoint;
     size_t sizeForWorkgroupVariables { 0 };
+    size_t bindingCount { 0 };
 };
 
 } // namespace Reflection
@@ -229,10 +230,15 @@ struct PrepareResult {
     CompilationScope compilationScope;
 };
 
+struct DeviceState {
+    unsigned appleGPUFamily { 4 };
+    bool shaderValidationEnabled { false };
+};
+
 Variant<PrepareResult, Error> prepare(ShaderModule&, const HashMap<String, PipelineLayout*>&);
 Variant<PrepareResult, Error> prepare(ShaderModule&, const String& entryPointName, PipelineLayout*);
 
-Variant<String, Error> generate(ShaderModule&, PrepareResult&, HashMap<String, ConstantValue>&);
+Variant<String, Error> generate(ShaderModule&, PrepareResult&, HashMap<String, ConstantValue>&, DeviceState&&);
 
 std::optional<ConstantValue> evaluate(const AST::Expression&, const HashMap<String, ConstantValue>&);
 

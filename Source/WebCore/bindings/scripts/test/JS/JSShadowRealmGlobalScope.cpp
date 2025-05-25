@@ -22,6 +22,7 @@
 #include "JSShadowRealmGlobalScope.h"
 
 #include "ActiveDOMObject.h"
+#include "ContextDestructionObserverInlines.h"
 #include "ExtendedDOMClientIsoSubspaces.h"
 #include "ExtendedDOMIsoSubspaces.h"
 #include "JSDOMAttribute.h"
@@ -33,6 +34,7 @@
 #include "JSExposedStar.h"
 #include "JSShadowRealmGlobalScope.h"
 #include "ScriptExecutionContext.h"
+#include "Settings.h"
 #include "ShadowRealmGlobalScope.h"
 #include "WebCoreJSClientData.h"
 #include <JavaScriptCore/HeapAnalyzer.h>

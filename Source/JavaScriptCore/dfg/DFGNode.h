@@ -1390,6 +1390,7 @@ public:
         case ValuePow:
         case DoubleAsInt32:
         case Int52Rep:
+        case MultiGetByVal:
             return result;
         default:
             return result & ~NodeBytecodeNeedsNegZero;
@@ -1734,6 +1735,7 @@ public:
         case ValueBitNot:
         case ValueBitLShift:
         case ValueBitRShift:
+        case ValueBitURShift:
         case ValueNegate:
             return true;
         default:

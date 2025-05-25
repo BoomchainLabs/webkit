@@ -2214,7 +2214,12 @@ static bool didInvokeUpdateState = false;
 
 @end
 
+// FIXME: Re-enable this test once webkit.org/b/292940 is resolved.
+#if PLATFORM(MAC) || defined(NDEBUG)
 TEST(WritingTools, RevealOffScreenSuggestionWhenActive)
+#else
+TEST(WritingTools, DISABLED_RevealOffScreenSuggestionWhenActive)
+#endif
 {
     auto firstSuggestion = adoptNS([[WTTextSuggestion alloc] initWithOriginalRange:NSMakeRange(0, 4) replacement:@"ZZZZ"]);
     auto secondSuggestion = adoptNS([[WTTextSuggestion alloc] initWithOriginalRange:NSMakeRange(12, 4) replacement:@"YYYY"]);
@@ -2887,7 +2892,8 @@ TEST(WritingTools, IsWritingToolsActiveAPIWithNoInlineEditing)
 
 #if PLATFORM(IOS_FAMILY)
 
-TEST(WritingTools, PanelHidesInputAccessoryView)
+// FIXME: Re-enable this test once webkit.org/b/292940 is resolved.
+TEST(WritingTools, DISABLED_PanelHidesInputAccessoryView)
 {
     RetainPtr webView = adoptNS([[TestWKWebView alloc] initWithFrame:CGRectMake(0, 0, 320, 500)]);
     RetainPtr delegate = adoptNS([TestInputDelegate new]);
@@ -2952,7 +2958,8 @@ TEST(WritingTools, ShowAffordance)
     expectScheduleShowAffordanceForSelectionRectCalled(true);
 }
 
-TEST(WritingTools, ShowAffordanceForMultipleLines)
+// FIXME: Re-enable this test once webkit.org/b/292940 is resolved.
+TEST(WritingTools, DISABLED_ShowAffordanceForMultipleLines)
 {
     FORCE_WRITING_TOOLS_AVAILABLE()
 

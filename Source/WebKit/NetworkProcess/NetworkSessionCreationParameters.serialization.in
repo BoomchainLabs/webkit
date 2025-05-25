@@ -45,11 +45,9 @@ enum class WebKit::AllowsCellularAccess : bool;
     String cookiePersistentStoragePath;
     WebKit::SoupCookiePersistentStorageType cookiePersistentStorageType;
     bool persistentCredentialStorageEnabled;
+    bool ignoreTLSErrors;
     WebCore::SoupNetworkProxySettings proxySettings;
     WebCore::HTTPCookieAcceptPolicy cookieAcceptPolicy;
-#endif
-#if USE(SOUP) || USE(CURL)
-    bool ignoreTLSErrors;
 #endif
 #if USE(CURL)
     String cookiePersistentStorageFile;
@@ -79,7 +77,6 @@ enum class WebKit::AllowsCellularAccess : bool;
     String webPushMachServiceName;
     String webPushPartitionString;
     bool enablePrivateClickMeasurementDebugMode;
-    bool isBlobRegistryTopOriginPartitioningEnabled;
     bool isOptInCookiePartitioningEnabled;
     bool shouldSendPrivateTokenIPCForTesting;
     uint64_t cookiesVersion;

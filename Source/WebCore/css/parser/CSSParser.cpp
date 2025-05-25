@@ -78,6 +78,7 @@
 #include <bitset>
 #include <memory>
 #include <optional>
+#include <wtf/StdLibExtras.h>
 
 namespace WebCore {
 
@@ -200,7 +201,7 @@ bool CSSParser::parseDeclarationList(MutableStyleProperties& declaration, const 
     filterProperties(IsImportant::Yes, parser.topContext().m_parsedProperties, results, unusedEntries, seenProperties, seenCustomProperties);
     filterProperties(IsImportant::No, parser.topContext().m_parsedProperties, results, unusedEntries, seenProperties, seenCustomProperties);
     if (unusedEntries)
-        results.remove(0, unusedEntries);
+        results.removeAt(0, unusedEntries);
     return declaration.addParsedProperties(results);
 }
 
@@ -636,7 +637,7 @@ RefPtr<StyleRuleImport> CSSParser::consumeImportRule(CSSParserTokenRange prelude
     auto supports = consumeSupports();
     if (!supports)
         return nullptr; // Discard import rule with incorrect syntax.
-    auto mediaQueries = MQ::MediaQueryParser::parse(prelude, MediaQueryParserContext(m_context));
+    auto mediaQueries = MQ::MediaQueryParser::parse(prelude, m_context);
 
     return StyleRuleImport::create(uri, WTFMove(mediaQueries), WTFMove(cascadeLayerName), WTFMove(*supports));
 }
@@ -694,12 +695,11 @@ Vector<Ref<StyleRuleBase>> CSSParser::consumeNestedGroupRules(CSSParserTokenRang
                 if (m_observerWrapper)
                     m_observerWrapper->observer().markRuleBodyContainsImplicitlyNestedProperties();
             }
-            for (auto& rule : topContext().m_parsedRules)
-                rules.append(rule);
+            rules.appendVector(topContext().m_parsedRules);
         });
     } else {
-        consumeRuleList(block, RuleList::Regular, [&rules](Ref<StyleRuleBase> rule) {
-            rules.append(rule);
+        consumeRuleList(block, RuleList::Regular, [&rules](Ref<StyleRuleBase>&& rule) {
+            rules.append(WTFMove(rule));
         });
     }
     rules.shrinkToFit();
@@ -719,7 +719,7 @@ RefPtr<StyleRuleMedia> CSSParser::consumeMediaRule(CSSParserTokenRange prelude, 
     if (RefPtr observerWrapper = m_observerWrapper.get())
         observerWrapper->observer().endRuleBody(observerWrapper->endOffset(block));
 
-    return StyleRuleMedia::create(MQ::MediaQueryParser::parse(prelude, { m_context }), WTFMove(rules));
+    return StyleRuleMedia::create(MQ::MediaQueryParser::parse(prelude, m_context), WTFMove(rules));
 }
 
 RefPtr<StyleRuleSupports> CSSParser::consumeSupportsRule(CSSParserTokenRange prelude, CSSParserTokenRange block)
@@ -821,7 +821,7 @@ RefPtr<StyleRuleFontFeatureValuesBlock> CSSParser::consumeFontFeatureValuesRuleB
             ASSERT(value->isInteger());
             auto tagInteger = value->resolveAsIntegerDeprecated();
             ASSERT(tagInteger >= 0);
-            values.append(std::make_unsigned_t<int>(tagInteger));
+            values.append(unsignedCast(tagInteger));
             if (maxValues && values.size() > *maxValues)
                 return { };
         }

@@ -31,7 +31,7 @@
 #include "CachedRawResource.h"
 #include "CachedRawResourceClient.h"
 #include "CachedResourceHandle.h"
-#include "ExceptionOr.h"
+#include "EventLoop.h"
 #include "HTMLElement.h"
 #include "HTMLModelElementCamera.h"
 #include "IDLTypes.h"
@@ -49,10 +49,12 @@
 
 namespace WebCore {
 
+class CachedResourceRequest;
 class DOMMatrixReadOnly;
 class DOMPointReadOnly;
 class Event;
 class GraphicsLayer;
+class LayoutPoint;
 class LayoutSize;
 class Model;
 class ModelPlayer;
@@ -61,6 +63,7 @@ class MouseEvent;
 
 template<typename IDLType> class DOMPromiseDeferred;
 template<typename IDLType> class DOMPromiseProxyWithResolveCallback;
+template<typename> class ExceptionOr;
 
 #if ENABLE(MODEL_PROCESS)
 template<typename IDLType> class DOMPromiseProxy;
@@ -79,6 +82,8 @@ public:
     // ActiveDOMObject.
     void ref() const final { HTMLElement::ref(); }
     void deref() const final { HTMLElement::deref(); }
+    void suspend(ReasonForSuspension) final;
+    void resume() final;
 
     // VisibilityChangeClient.
     void visibilityStateChanged() final;
@@ -163,6 +168,7 @@ public:
     WEBCORE_EXPORT void updateStageModeTransform(const TransformationMatrix&);
     WEBCORE_EXPORT void endStageModeInteraction();
     WEBCORE_EXPORT void tryAnimateModelToFitPortal(bool handledDrag, CompletionHandler<void(bool)>&&);
+    WEBCORE_EXPORT void resetModelTransformAfterDrag();
 #endif
 
 #if PLATFORM(COCOA)
@@ -175,6 +181,11 @@ public:
     WEBCORE_EXPORT String inlinePreviewUUIDForTesting() const;
 #endif
 
+    size_t memoryCost() const;
+#if ENABLE(RESOURCE_USAGE)
+    size_t externalMemoryCost() const;
+#endif
+
 private:
     HTMLModelElement(const QualifiedName&, Document&);
 
@@ -183,10 +194,16 @@ private:
     void modelDidChange();
     void createModelPlayer();
     void deleteModelPlayer();
+    void unloadModelPlayer(bool onSuspend);
+    void reloadModelPlayer();
+    void startReloadModelTimer();
+    void reloadModelTimerFired();
 
     RefPtr<GraphicsLayer> graphicsLayer() const;
 
     HTMLModelElement& readyPromiseResolve();
+
+    CachedResourceRequest createResourceRequest(const URL&, FetchOptions::Destination);
 
     // ActiveDOMObject.
     bool virtualHasPendingActivity() const final;
@@ -217,9 +234,11 @@ private:
     void didUpdateEntityTransform(ModelPlayer&, const TransformationMatrix&) final;
     void didUpdateBoundingBox(ModelPlayer&, const FloatPoint3D&, const FloatPoint3D&) final;
     void didFinishEnvironmentMapLoading(bool succeeded) final;
-    void renderingAbruptlyStopped() final;
+    void didUnload(ModelPlayer&) final;
 #endif
     std::optional<PlatformLayerIdentifier> modelContentsLayerID() const final;
+    bool isVisible() const final;
+    void logWarning(ModelPlayer&, const String&) final;
 
     Node::InsertedIntoAncestorResult insertedIntoAncestor(InsertionType , ContainerNode& parentOfInsertedTree) override;
     void removedFromAncestor(RemovalType, ContainerNode& oldParentOfRemovedTree) override;
@@ -234,6 +253,8 @@ private:
     void setAnimationIsPlaying(bool, DOMPromiseDeferred<void>&&);
 
     LayoutSize contentSize() const;
+
+    void reportExtraMemoryCost();
 
 #if ENABLE(MODEL_PROCESS)
     bool autoplay() const;
@@ -255,6 +276,8 @@ private:
     URL m_sourceURL;
     CachedResourceHandle<CachedRawResource> m_resource;
     SharedBufferBuilder m_data;
+    mutable std::atomic<size_t> m_dataMemoryCost { 0 };
+    size_t m_reportedDataMemoryCost { 0 };
     WeakPtr<ModelPlayerProvider> m_modelPlayerProvider;
     RefPtr<Model> m_model;
     UniqueRef<ReadyPromise> m_readyPromise;
@@ -263,6 +286,7 @@ private:
     bool m_shouldCreateModelPlayerUponRendererAttachment { false };
 
     RefPtr<ModelPlayer> m_modelPlayer;
+    EventLoopTimerHandle m_reloadModelTimer;
 #if ENABLE(MODEL_PROCESS)
     Ref<DOMMatrixReadOnly> m_entityTransform;
     Ref<DOMPointReadOnly> m_boundingBoxCenter;
@@ -270,6 +294,7 @@ private:
     double m_playbackRate { 1.0 };
     URL m_environmentMapURL;
     SharedBufferBuilder m_environmentMapData;
+    mutable std::atomic<size_t> m_environmentMapDataMemoryCost { 0 };
     CachedResourceHandle<CachedRawResource> m_environmentMapResource;
     UniqueRef<EnvironmentMapPromise> m_environmentMapReadyPromise;
 #endif

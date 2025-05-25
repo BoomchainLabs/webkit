@@ -68,6 +68,7 @@
 #include <WebCore/GUniquePtrGtk.h>
 #include <WebCore/GtkUtilities.h>
 #include <WebCore/GtkVersioning.h>
+#include <WebCore/NativeImage.h>
 #include <WebCore/NotImplemented.h>
 #include <WebCore/PlatformKeyboardEvent.h>
 #include <WebCore/PlatformMouseEvent.h>
@@ -2154,6 +2155,7 @@ static void webkitWebViewBaseTouchLongPress(WebKitWebViewBase* webViewBase, gdou
 
 static void webkitWebViewBaseTouchPress(WebKitWebViewBase* webViewBase, int nPress, double x, double y, GtkGesture*)
 {
+    gtk_widget_grab_focus(GTK_WIDGET(webViewBase));
     webViewBase->priv->isLongPressed = false;
 }
 

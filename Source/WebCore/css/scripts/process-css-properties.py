@@ -471,7 +471,6 @@ class StylePropertyCodeGenProperties:
         Schema.Entry("auto-functions", allowed_types=[bool], default_value=False),
         Schema.Entry("cascade-alias", allowed_types=[str]),
         Schema.Entry("color-property", allowed_types=[bool], default_value=False),
-        Schema.Entry("computable", allowed_types=[bool]),
         Schema.Entry("disables-native-appearance", allowed_types=[bool], default_value=False),
         Schema.Entry("enable-if", allowed_types=[str]),
         Schema.Entry("fast-path-inherited", allowed_types=[bool], default_value=False),
@@ -495,6 +494,7 @@ class StylePropertyCodeGenProperties:
         Schema.Entry("parser-grammar", allowed_types=[str]),
         Schema.Entry("parser-grammar-unused", allowed_types=[str]),
         Schema.Entry("parser-grammar-unused-reason", allowed_types=[str]),
+        Schema.Entry("parser-shorthand", allowed_types=[str]),
         Schema.Entry("render-style-getter", allowed_types=[str]),
         Schema.Entry("render-style-initial", allowed_types=[str]),
         Schema.Entry("render-style-name-for-methods", allowed_types=[str]),
@@ -502,13 +502,20 @@ class StylePropertyCodeGenProperties:
         Schema.Entry("separator", allowed_types=[str]),
         Schema.Entry("settings-flag", allowed_types=[str]),
         Schema.Entry("sink-priority", allowed_types=[bool], default_value=False),
+        Schema.Entry("shorthand-pattern", allowed_types=[str]),
+        Schema.Entry("shorthand-parser-pattern", allowed_types=[str]),
+        Schema.Entry("shorthand-style-extractor-pattern", allowed_types=[str]),
         Schema.Entry("skip-codegen", allowed_types=[bool], default_value=False),
         Schema.Entry("skip-parser", allowed_types=[bool], default_value=False),
         Schema.Entry("skip-style-builder", allowed_types=[bool], default_value=False),
+        Schema.Entry("skip-style-extractor", allowed_types=[bool], default_value=False),
         Schema.Entry("status", allowed_types=[str]),
         Schema.Entry("style-builder-conditional-converter", allowed_types=[str]),
         Schema.Entry("style-builder-converter", allowed_types=[str]),
         Schema.Entry("style-builder-custom", allowed_types=[str]),
+        Schema.Entry("style-converter", allowed_types=[str]),
+        Schema.Entry("style-extractor-converter", allowed_types=[str]),
+        Schema.Entry("style-extractor-custom", allowed_types=[bool], default_value=False),
         Schema.Entry("svg", allowed_types=[bool], default_value=False),
         Schema.Entry("top-priority", allowed_types=[bool], default_value=False),
         Schema.Entry("top-priority-reason", allowed_types=[str]),
@@ -576,6 +583,22 @@ class StylePropertyCodeGenProperties:
             json_value["style-builder-custom"] = "Initial|Inherit|Value"
         json_value["style-builder-custom"] = frozenset(json_value["style-builder-custom"].split("|"))
 
+        if "style-converter" in json_value:
+            if "style-builder-converter" in json_value:
+                raise Exception(f"{key_path} can't specify both 'style-converter' and 'style-builder-converter'.")
+            if "style-extractor-converter" in json_value:
+                raise Exception(f"{key_path} can't specify both 'style-converter' and 'style-extractor-converter'.")
+            json_value["style-builder-converter"] = json_value["style-converter"]
+            json_value["style-extractor-converter"] = json_value["style-converter"]
+
+        if "shorthand-pattern" in json_value:
+            if "shorthand-parser-pattern" in json_value:
+                raise Exception(f"{key_path} can't specify both 'shorthand-pattern' and 'shorthand-parser-pattern'.")
+            if "shorthand-style-extractor-pattern" in json_value:
+                raise Exception(f"{key_path} can't specify both 'shorthand-pattern' and 'shorthand-style-extractor-pattern'.")
+            json_value["shorthand-parser-pattern"] = json_value["shorthand-pattern"]
+            json_value["shorthand-style-extractor-pattern"] = json_value["shorthand-pattern"]
+
         if "logical-property-group" in json_value:
             if json_value.get("longhands"):
                 raise Exception(f"{key_path} is a shorthand, but belongs to a logical property group.")
@@ -585,16 +608,9 @@ class StylePropertyCodeGenProperties:
             json_value["longhands"] = list(compact_map(lambda value: Longhand.from_json(parsing_context, f"{key_path}.codegen-properties", value), json_value["longhands"]))
             if not json_value["longhands"]:
                 del json_value["longhands"]
-
-        if "computable" in json_value:
-            if json_value["computable"]:
-                if json_value.get("internal-only", False):
-                    raise Exception(f"{key_path} can't be both internal-only and computable.")
-        else:
-            if json_value.get("internal-only", False):
-                json_value["computable"] = False
             else:
-                json_value["computable"] = True
+                if "parser-shorthand" not in json_value:
+                    json_value["parser-shorthand"] = f"{property_name.id_without_prefix_with_lowercase_first_letter}Shorthand"
 
         if json_value.get("top-priority", False):
             if json_value.get("top-priority-reason") is None:
@@ -619,7 +635,7 @@ class StylePropertyCodeGenProperties:
                 raise Exception(f"{key_path} can't be both a cascade alias and a shorthand.")
 
         if json_value.get("parser-grammar"):
-            for entry_name in ["parser-function", "skip-parser", "longhands"]:
+            for entry_name in ["parser-function", "skip-parser"]:
                 if entry_name in json_value:
                     raise Exception(f"{key_path} can't have both 'parser-grammar' and '{entry_name}'.")
             grammar = Grammar.from_string(parsing_context, f"{key_path}", name, json_value["parser-grammar"])
@@ -642,7 +658,7 @@ class StylePropertyCodeGenProperties:
         if json_value.get("parser-function"):
             if "parser-grammar-unused" not in json_value:
                 raise Exception(f"{key_path} must have 'parser-grammar-unused' specified when using 'parser-function'.")
-            for entry_name in ["skip-parser", "longhands", "parser-grammar"]:
+            for entry_name in ["skip-parser", "parser-grammar"]:
                 if entry_name in json_value:
                     raise Exception(f"{key_path} can't have both 'parser-function' and '{entry_name}'.")
 
@@ -819,7 +835,7 @@ class StyleProperty:
         if self.codegen_properties.internal_only:
             return True
 
-        if not self.codegen_properties.computable:
+        if self.codegen_properties.skip_style_extractor:
             return True
 
         if self.codegen_properties.skip_style_builder and not self.codegen_properties.is_logical and not self.codegen_properties.cascade_alias:
@@ -908,6 +924,10 @@ class StyleProperties:
     @property
     def noun(self):
         return 'property'
+
+    @property
+    def supports_shorthands(self):
+        return True
 
     @staticmethod
     def from_json(parsing_context, key_path, json_value):
@@ -1236,6 +1256,10 @@ class DescriptorSet:
     @property
     def noun(self):
         return 'descriptor'
+
+    @property
+    def supports_shorthands(self):
+        return False
 
     @property
     def all(self):
@@ -4142,11 +4166,8 @@ class GenerateStyleBuilderGenerated:
                     to.write(f"builderState.style().setHasAuto{property.codegen_properties.render_style_name_for_methods}();")
                     to.write(f"return;")
                 to.write(f"}}")
-                if property.codegen_properties.svg:
-                    self._generate_svg_property_value_setter(to, property, converted_value(property))
-                else:
-                    self._generate_property_value_setter(to, property, converted_value(property))
-            elif property.codegen_properties.visited_link_color_support:
+
+            if property.codegen_properties.visited_link_color_support:
                 self._generate_color_property_value_setter(to, property, converted_value(property))
             elif property.codegen_properties.animation_property:
                 self._generate_animation_property_value_setter(to, property)
@@ -4154,20 +4175,19 @@ class GenerateStyleBuilderGenerated:
                 self._generate_font_property_value_setter(to, property, converted_value(property))
             elif property.codegen_properties.fill_layer_property:
                 self._generate_fill_layer_property_value_setter(to, property)
-            else:
-                if property.codegen_properties.style_builder_conditional_converter:
-                    to.write(f"auto convertedValue = BuilderConverter::convert{property.codegen_properties.style_builder_conditional_converter}(builderState, value);")
-                    to.write(f"if (convertedValue)")
-                    with to.indent():
-                        if property.codegen_properties.svg:
-                            self._generate_svg_property_value_setter(to, property, converted_value(property))
-                        else:
-                            self._generate_property_value_setter(to, property, converted_value(property))
-                else:
+            elif property.codegen_properties.style_builder_conditional_converter:
+                to.write(f"auto convertedValue = BuilderConverter::convert{property.codegen_properties.style_builder_conditional_converter}(builderState, value);")
+                to.write(f"if (convertedValue)")
+                with to.indent():
                     if property.codegen_properties.svg:
                         self._generate_svg_property_value_setter(to, property, converted_value(property))
                     else:
                         self._generate_property_value_setter(to, property, converted_value(property))
+            else:
+                if property.codegen_properties.svg:
+                    self._generate_svg_property_value_setter(to, property, converted_value(property))
+                else:
+                    self._generate_property_value_setter(to, property, converted_value(property))
 
             if property.codegen_properties.fast_path_inherited:
                 to.write(f"builderState.style().setDisallowsFastPathInheritance();")
@@ -4287,6 +4307,384 @@ class GenerateStyleBuilderGenerated:
                 )
 
                 self._generate_style_builder_generated_cpp_builder_generated_apply(
+                    to=writer
+                )
+
+
+# Generates `StyleExtractorGenerated.cpp`.
+class GenerateStyleExtractorGenerated:
+    def __init__(self, generation_context):
+        self.generation_context = generation_context
+
+    def generate(self):
+        self.generate_style_extractor_generated_cpp()
+
+    @property
+    def properties_and_descriptors(self):
+        return self.generation_context.properties_and_descriptors
+
+    @property
+    def style_properties(self):
+        return self.generation_context.properties_and_descriptors.style_properties
+
+    # MARK: - Helper generator functions for StyleExtractorGenerated.cpp
+
+    @staticmethod
+    def wrap_in_converter(property, value):
+        if property.codegen_properties.style_extractor_converter:
+            return f"ExtractorConverter::convert{property.codegen_properties.style_extractor_converter}(extractorState, {value})"
+        elif property.codegen_properties.animation_property:
+            return f"ExtractorConverter::convertAnimation{property.codegen_properties.animation_name_for_methods}(extractorState, {value}, animation, animationList)"
+        elif property.codegen_properties.fill_layer_property:
+            return f"ExtractorConverter::convertFillLayer{property.codegen_properties.fill_layer_name_for_methods}(extractorState, {value})"
+        elif property.codegen_properties.color_property:
+            return f"ExtractorConverter::convertColor(extractorState, {value})"
+        else:
+            return f"ExtractorConverter::convert(extractorState, {value})"
+
+    @staticmethod
+    def wrap_in_serializer(property, value):
+        if property.codegen_properties.style_extractor_converter:
+            return f"ExtractorSerializer::serialize{property.codegen_properties.style_extractor_converter}(extractorState, builder, context, {value})"
+        elif property.codegen_properties.animation_property:
+            return f"ExtractorSerializer::serializeAnimation{property.codegen_properties.animation_name_for_methods}(extractorState, builder, context, {value}, animation, animationList)"
+        elif property.codegen_properties.fill_layer_property:
+            return f"ExtractorSerializer::serializeFillLayer{property.codegen_properties.fill_layer_name_for_methods}(extractorState, builder, context, {value})"
+        elif property.codegen_properties.color_property:
+            return f"ExtractorSerializer::serializeColor(extractorState, builder, context, {value})"
+        else:
+            return f"ExtractorSerializer::serialize(extractorState, builder, context, {value})"
+
+    # Color property getters.
+
+    def _generate_color_property_value_getter(self, to, property):
+        to.write(f"if (extractorState.allowVisitedStyle) {{")
+        with to.indent():
+            to.write(f"return extractorState.pool.createColorValue(extractorState.style.visitedDependentColor({property.id}));")
+        to.write(f"}}")
+        self._generate_property_value_getter(to, property)
+
+    def _generate_color_property_value_serialization_getter(self, to, property):
+        to.write(f"if (extractorState.allowVisitedStyle) {{")
+        with to.indent():
+            to.write(f"builder.append(serializationForCSS(extractorState.style.visitedDependentColor({property.id})));")
+            to.write(f"return;")
+        to.write(f"}}")
+        self._generate_property_value_serialization_getter(to, property)
+
+    # Animation property getters.
+
+    def _generate_animation_property_value_getter(self, to, property):
+        to.write(f"auto mapper = [](auto& extractorState, const Animation* animation, const AnimationList* animationList) -> RefPtr<CSSValue> {{")
+        with to.indent():
+            to.write(f"if (!animation) {{")
+            with to.indent():
+                to.write(f"return {GenerateStyleExtractorGenerated.wrap_in_converter(property, f'Animation::{property.codegen_properties.animation_initial}()')};")
+            to.write(f"}}")
+            to.write(f"if (!animation->is{property.codegen_properties.animation_name_for_methods}Filled()) {{")
+            with to.indent():
+                to.write(f"return {GenerateStyleExtractorGenerated.wrap_in_converter(property, f'animation->{property.codegen_properties.animation_getter}()')};")
+            to.write(f"}}")
+            to.write(f"return nullptr;")
+        to.write(f"}};")
+        to.write(f"return extractAnimationOrTransitionValue(extractorState, extractorState.style.{property.method_name_for_animations_or_transitions}(), mapper);")
+
+    def _generate_animation_property_value_serialization_getter(self, to, property):
+        to.write(f"auto mapper = [](auto& extractorState, StringBuilder& builder, const CSS::SerializationContext& context, bool includeComma, const Animation* animation, const AnimationList* animationList) {{")
+        with to.indent():
+            to.write(f"if (!animation) {{")
+            with to.indent():
+                to.write(f"if (includeComma)")
+                with to.indent():
+                    to.write(f"builder.append(\", \"_s);")
+                to.write(f"{GenerateStyleExtractorGenerated.wrap_in_serializer(property, f'Animation::{property.codegen_properties.animation_initial}()')};")
+                to.write(f"return;")
+            to.write(f"}}")
+            to.write(f"if (!animation->is{property.codegen_properties.animation_name_for_methods}Filled()) {{")
+            with to.indent():
+                to.write(f"if (includeComma)")
+                with to.indent():
+                    to.write(f"builder.append(\", \"_s);")
+                to.write(f"{GenerateStyleExtractorGenerated.wrap_in_serializer(property, f'animation->{property.codegen_properties.animation_getter}()')};")
+                to.write(f"return;")
+            to.write(f"}}")
+        to.write(f"}};")
+        to.write(f"extractAnimationOrTransitionValueSerialization(extractorState, builder, context, extractorState.style.{property.method_name_for_animations_or_transitions}(), mapper);")
+
+    # Font property getters.
+
+    def _generate_font_property_value_getter(self, to, property):
+        to.write(f"return {GenerateStyleExtractorGenerated.wrap_in_converter(property, f'extractorState.style.fontDescription().{property.codegen_properties.font_description_getter}()')};")
+
+    def _generate_font_property_value_serialization_getter(self, to, property):
+        to.write(f"{GenerateStyleExtractorGenerated.wrap_in_serializer(property, f'extractorState.style.fontDescription().{property.codegen_properties.font_description_getter}()')};")
+
+    # Fill Layer property getters.
+
+    def _generate_fill_layer_property_value_getter(self, to, property):
+        to.write(f"auto mapper = [](auto& extractorState, auto& layer) -> Ref<CSSValue> {{")
+        with to.indent():
+            to.write(f"return {GenerateStyleExtractorGenerated.wrap_in_converter(property, f'layer.{property.codegen_properties.fill_layer_getter}()')};")
+        to.write(f"}};")
+        to.write(f"return extractFillLayerValue(extractorState, extractorState.style.{property.method_name_for_layers}(), mapper);")
+
+    def _generate_fill_layer_property_value_serialization_getter(self, to, property):
+        to.write(f"auto mapper = [](auto& extractorState, StringBuilder& builder, const CSS::SerializationContext& context, bool includeComma, auto& layer) {{")
+        with to.indent():
+            to.write(f"if (includeComma)")
+            with to.indent():
+                to.write(f"builder.append(\", \"_s);")
+            to.write(f"{GenerateStyleExtractorGenerated.wrap_in_serializer(property, f'layer.{property.codegen_properties.fill_layer_getter}()')};")
+        to.write(f"}};")
+        to.write(f"extractFillLayerValueSerialization(extractorState, builder, context, extractorState.style.{property.method_name_for_layers}(), mapper);")
+
+    # SVG property value/serialization getters.
+
+    def _generate_svg_property_value_getter(self, to, property):
+        to.write(f"return {GenerateStyleExtractorGenerated.wrap_in_converter(property, f'extractorState.style.svgStyle().{property.codegen_properties.render_style_getter}()')};")
+
+    def _generate_svg_property_value_serialization_getter(self, to, property):
+        to.write(f"{GenerateStyleExtractorGenerated.wrap_in_serializer(property, f'extractorState.style.svgStyle().{property.codegen_properties.render_style_getter}()')};")
+
+    # All other property value getters.
+
+    def _generate_property_value_getter(self, to, property):
+        to.write(f"return {GenerateStyleExtractorGenerated.wrap_in_converter(property, f'extractorState.style.{property.codegen_properties.render_style_getter}()')};")
+
+    def _generate_property_value_serialization_getter(self, to, property):
+        to.write(f"{GenerateStyleExtractorGenerated.wrap_in_serializer(property, f'extractorState.style.{property.codegen_properties.render_style_getter}()')};")
+
+    # Shorthand property value getter.
+
+    def _generate_style_extractor_generated_cpp_shorthand_value_extractor(self, to, property):
+        to.write(f"static RefPtr<CSSValue> extract{property.id_without_prefix}Shorthand(ExtractorState& extractorState)")
+        to.write(f"{{")
+        with to.indent():
+            to.write(f"return extract{property.codegen_properties.shorthand_style_extractor_pattern}Shorthand(extractorState, {property.id_without_prefix_with_lowercase_first_letter}Shorthand());")
+        to.write(f"}}")
+
+    def _generate_style_extractor_generated_cpp_shorthand_value_serialization_extractor(self, to, property):
+        to.write(f"static void extract{property.id_without_prefix}ShorthandSerialization(ExtractorState& extractorState, StringBuilder& builder, const CSS::SerializationContext& context)")
+        to.write(f"{{")
+        with to.indent():
+            to.write(f"extract{property.codegen_properties.shorthand_style_extractor_pattern}ShorthandSerialization(extractorState, builder, context, {property.id_without_prefix_with_lowercase_first_letter}Shorthand());")
+        to.write(f"}}")
+
+    # Longhand property value getter.
+
+    def _generate_style_extractor_generated_cpp_value_extractor(self, to, property):
+        to.write(f"static RefPtr<CSSValue> extract{property.id_without_prefix}(ExtractorState& extractorState)")
+        to.write(f"{{")
+
+        with to.indent():
+            if property.codegen_properties.auto_functions:
+                to.write(f"if (extractorState.style.hasAuto{property.codegen_properties.render_style_name_for_methods}())")
+                with to.indent():
+                    to.write(f"return CSSPrimitiveValue::create(CSSValueAuto);")
+
+            if property.codegen_properties.visited_link_color_support:
+                self._generate_color_property_value_getter(to, property)
+            elif property.codegen_properties.animation_property:
+                self._generate_animation_property_value_getter(to, property)
+            elif property.codegen_properties.font_property:
+                self._generate_font_property_value_getter(to, property)
+            elif property.codegen_properties.fill_layer_property:
+                self._generate_fill_layer_property_value_getter(to, property)
+            elif property.codegen_properties.svg:
+                self._generate_svg_property_value_getter(to, property)
+            else:
+                self._generate_property_value_getter(to, property)
+
+        to.write(f"}}")
+
+    def _generate_style_extractor_generated_cpp_value_serialization_extractor(self, to, property):
+        to.write(f"static void extract{property.id_without_prefix}Serialization(ExtractorState& extractorState, StringBuilder& builder, const CSS::SerializationContext& context)")
+        to.write(f"{{")
+
+        with to.indent():
+            if property.codegen_properties.auto_functions:
+                to.write(f"if (extractorState.style.hasAuto{property.codegen_properties.render_style_name_for_methods}()) {{")
+                with to.indent():
+                    to.write(f"builder.append(nameLiteralForSerialization(CSSValueAuto));")
+                    to.write(f"return;")
+                to.write(f"}}")
+
+            if property.codegen_properties.visited_link_color_support:
+                self._generate_color_property_value_serialization_getter(to, property)
+            elif property.codegen_properties.animation_property:
+                self._generate_animation_property_value_serialization_getter(to, property)
+            elif property.codegen_properties.font_property:
+                self._generate_font_property_value_serialization_getter(to, property)
+            elif property.codegen_properties.fill_layer_property:
+                self._generate_fill_layer_property_value_serialization_getter(to, property)
+            elif property.codegen_properties.svg:
+                self._generate_svg_property_value_serialization_getter(to, property)
+            else:
+                self._generate_property_value_serialization_getter(to, property)
+
+        to.write(f"}}")
+
+    def _generate_style_extractor_generated_cpp_extractor_functions_class(self, *, to):
+        to.write(f"class ExtractorFunctions {{")
+        to.write(f"public:")
+
+        with to.indent():
+            for property in self.properties_and_descriptors.all_unique:
+                if not isinstance(property, StyleProperty):
+                    continue
+                if property.codegen_properties.internal_only:
+                    continue
+                if property.codegen_properties.skip_style_extractor:
+                    continue
+                if property.codegen_properties.style_extractor_custom:
+                    continue
+                if property.codegen_properties.is_logical:
+                    continue
+                if property.codegen_properties.longhands:
+                    if not property.codegen_properties.shorthand_style_extractor_pattern:
+                        continue
+                    self._generate_style_extractor_generated_cpp_shorthand_value_extractor(to, property)
+                    self._generate_style_extractor_generated_cpp_shorthand_value_serialization_extractor(to, property)
+                else:
+                    self._generate_style_extractor_generated_cpp_value_extractor(to, property)
+                    self._generate_style_extractor_generated_cpp_value_serialization_extractor(to, property)
+
+        to.write(f"}};")
+
+    # Property getter dispatch.
+
+    def _generate_style_extractor_generated_cpp_extractor_generated_extract_value(self, *, to):
+        to.write_block("""
+            RefPtr<CSSValue> ExtractorGenerated::extractValue(ExtractorState& extractorState, CSSPropertyID id)
+            {
+                switch (id) {
+                case CSSPropertyID::CSSPropertyInvalid:
+                    break;
+                case CSSPropertyID::CSSPropertyCustom:
+                    ASSERT_NOT_REACHED();
+                    break;""")
+
+        with to.indent():
+            def scope_for_function(property):
+                if property.codegen_properties.style_extractor_custom:
+                    return "ExtractorCustom"
+                if property.codegen_properties.longhands and not property.codegen_properties.shorthand_style_extractor_pattern:
+                    return "ExtractorCustom"
+                return "ExtractorFunctions"
+
+            for property in self.properties_and_descriptors.all_unique:
+                to.write(f"case {property.id}:")
+                with to.indent():
+                    if not isinstance(property, StyleProperty):
+                        to.write(f"// Skipped - Descriptor-only property")
+                        to.write(f"return nullptr;")
+                    elif property.codegen_properties.internal_only:
+                        to.write(f"// Skipped - Internal only")
+                        to.write(f"return nullptr;")
+                    elif property.codegen_properties.skip_style_extractor:
+                        to.write(f"// Skipped - Not computable")
+                        to.write(f"return nullptr;")
+                    elif property.codegen_properties.is_logical and not property.codegen_properties.style_extractor_custom:
+                        to.write(f"// Logical properties are handled by recursing using the direction resolved property.")
+                        to.write(f"return extractValue(extractorState, CSSProperty::resolveDirectionAwareProperty(id, extractorState.style.writingMode()));")
+                    elif property.codegen_properties.longhands:
+                        to.write(f"ASSERT(isShorthand(id));")
+                        to.write(f"return {scope_for_function(property)}::extract{property.id_without_prefix}Shorthand(extractorState);")
+                    else:
+                        to.write(f"return {scope_for_function(property)}::extract{property.id_without_prefix}(extractorState);")
+
+            to.write(f"}}")
+            to.write(f"ASSERT_NOT_REACHED();")
+            to.write(f"return nullptr;")
+        to.write(f"}}")
+        to.newline()
+
+    # Property serialization dispatch.
+
+    def _generate_style_extractor_generated_cpp_extractor_generated_extract_serialization(self, *, to):
+        to.write_block("""
+            void ExtractorGenerated::extractValueSerialization(ExtractorState& extractorState, StringBuilder& builder, const CSS::SerializationContext& context, CSSPropertyID id)
+            {
+                switch (id) {
+                case CSSPropertyID::CSSPropertyInvalid:
+                    break;
+                case CSSPropertyID::CSSPropertyCustom:
+                    ASSERT_NOT_REACHED();
+                    break;""")
+
+        with to.indent():
+            def scope_for_function(property):
+                if property.codegen_properties.style_extractor_custom:
+                    return "ExtractorCustom"
+                if property.codegen_properties.longhands and not property.codegen_properties.shorthand_style_extractor_pattern:
+                    return "ExtractorCustom"
+                return "ExtractorFunctions"
+
+            for property in self.properties_and_descriptors.all_unique:
+                to.write(f"case {property.id}:")
+                with to.indent():
+                    if not isinstance(property, StyleProperty):
+                        to.write(f"// Skipped - Descriptor-only property")
+                        to.write(f"return;")
+                    elif property.codegen_properties.internal_only:
+                        to.write(f"// Skipped - Internal only")
+                        to.write(f"return;")
+                    elif property.codegen_properties.skip_style_extractor:
+                        to.write(f"// Skipped - Not computable")
+                        to.write(f"return;")
+                    elif property.codegen_properties.is_logical and not property.codegen_properties.style_extractor_custom:
+                        to.write(f"// Logical properties are handled by recursing using the direction resolved property.")
+                        to.write(f"extractValueSerialization(extractorState, builder, context, CSSProperty::resolveDirectionAwareProperty(id, extractorState.style.writingMode()));")
+                        to.write(f"return;")
+                    elif property.codegen_properties.longhands:
+                        to.write(f"ASSERT(isShorthand(id));")
+                        to.write(f"{scope_for_function(property)}::extract{property.id_without_prefix}ShorthandSerialization(extractorState, builder, context);")
+                        to.write(f"return;")
+                    else:
+                        to.write(f"{scope_for_function(property)}::extract{property.id_without_prefix}Serialization(extractorState, builder, context);")
+                        to.write(f"return;")
+
+            to.write(f"}}")
+            to.write(f"ASSERT_NOT_REACHED();")
+        to.write(f"}}")
+        to.newline()
+
+    def generate_style_extractor_generated_cpp(self):
+        with open('StyleExtractorGenerated.cpp', 'w') as output_file:
+            writer = Writer(output_file)
+
+            self.generation_context.generate_heading(
+                to=writer
+            )
+
+            self.generation_context.generate_cpp_required_includes(
+                to=writer,
+                header="StyleExtractorGenerated.h"
+            )
+
+            self.generation_context.generate_includes(
+                to=writer,
+                headers=[
+                    "CSSPrimitiveValueMappings.h",
+                    "CSSProperty.h",
+                    "RenderStyle.h",
+                    "StyleExtractorConverter.h",
+                    "StyleExtractorCustom.h",
+                    "StyleExtractorState.h",
+                    "StylePropertyShorthand.h",
+                ]
+            )
+
+            with self.generation_context.namespaces(["WebCore", "Style"], to=writer):
+                self._generate_style_extractor_generated_cpp_extractor_functions_class(
+                    to=writer
+                )
+
+                self._generate_style_extractor_generated_cpp_extractor_generated_extract_value(
+                    to=writer
+                )
+
+                self._generate_style_extractor_generated_cpp_extractor_generated_extract_serialization(
                     to=writer
                 )
 
@@ -4472,11 +4870,11 @@ class GenerateCSSPropertyParsing:
 
     @property
     def all_property_parsing_collections(self):
-        ParsingCollection = collections.namedtuple('ParsingCollection', ['id', 'name', 'noun', 'consumers'])
+        ParsingCollection = collections.namedtuple('ParsingCollection', ['id', 'name', 'noun', 'supports_shorthands', 'consumers'])
 
         result = []
         for set in self.properties_and_descriptors.all_sets:
-            result += [ParsingCollection(set.id, set.name, set.noun, list(self.property_consumers[property] for property in set.all))]
+            result += [ParsingCollection(set.id, set.name, set.noun, set.supports_shorthands, list(self.property_consumers[property] for property in set.all))]
         return result
 
     @property
@@ -4518,6 +4916,7 @@ class GenerateCSSPropertyParsing:
                     self.generation_context.generate_forward_declarations(
                         to=writer,
                         structs=[
+                            "PropertyParserResult",
                             "PropertyParserState",
                         ]
                     )
@@ -4542,68 +4941,11 @@ class GenerateCSSPropertyParsing:
             self.generation_context.generate_includes(
                 to=writer,
                 headers=[
-                    "CSSFunctionValue.h",
-                    "CSSOffsetRotateValue.h",
                     "CSSParserContext.h",
                     "CSSParserIdioms.h",
                     "CSSPropertyParser.h",
-                    "CSSPropertyParserConsumer+Align.h",
-                    "CSSPropertyParserConsumer+Anchor.h",
-                    "CSSPropertyParserConsumer+AngleDefinitions.h",
-                    "CSSPropertyParserConsumer+Animations.h",
-                    "CSSPropertyParserConsumer+AppleVisualEffect.h",
-                    "CSSPropertyParserConsumer+Attr.h",
-                    "CSSPropertyParserConsumer+Background.h",
-                    "CSSPropertyParserConsumer+Box.h",
-                    "CSSPropertyParserConsumer+CSSPrimitiveValueResolver.h",
-                    "CSSPropertyParserConsumer+Color.h",
-                    "CSSPropertyParserConsumer+ColorAdjust.h",
-                    "CSSPropertyParserConsumer+Content.h",
-                    "CSSPropertyParserConsumer+CounterStyles.h",
-                    "CSSPropertyParserConsumer+Display.h",
-                    "CSSPropertyParserConsumer+Easing.h",
-                    "CSSPropertyParserConsumer+Filter.h",
-                    "CSSPropertyParserConsumer+Font.h",
-                    "CSSPropertyParserConsumer+Grid.h",
-                    "CSSPropertyParserConsumer+Ident.h",
-                    "CSSPropertyParserConsumer+Image.h",
-                    "CSSPropertyParserConsumer+Inline.h",
-                    "CSSPropertyParserConsumer+IntegerDefinitions.h",
-                    "CSSPropertyParserConsumer+LengthDefinitions.h",
-                    "CSSPropertyParserConsumer+LengthPercentageDefinitions.h",
-                    "CSSPropertyParserConsumer+List.h",
-                    "CSSPropertyParserConsumer+Lists.h",
-                    "CSSPropertyParserConsumer+Masking.h",
-                    "CSSPropertyParserConsumer+Motion.h",
-                    "CSSPropertyParserConsumer+NumberDefinitions.h",
-                    "CSSPropertyParserConsumer+Percentage.h",
-                    "CSSPropertyParserConsumer+PercentageDefinitions.h",
-                    "CSSPropertyParserConsumer+Position.h",
-                    "CSSPropertyParserConsumer+PositionTry.h",
-                    "CSSPropertyParserConsumer+Primitives.h",
-                    "CSSPropertyParserConsumer+Ratio.h",
-                    "CSSPropertyParserConsumer+ResolutionDefinitions.h",
-                    "CSSPropertyParserConsumer+SVG.h",
-                    "CSSPropertyParserConsumer+ScrollSnap.h",
-                    "CSSPropertyParserConsumer+Scrollbars.h",
-                    "CSSPropertyParserConsumer+Shapes.h",
-                    "CSSPropertyParserConsumer+String.h",
-                    "CSSPropertyParserConsumer+Syntax.h",
-                    "CSSPropertyParserConsumer+TextDecoration.h",
-                    "CSSPropertyParserConsumer+TimeDefinitions.h",
-                    "CSSPropertyParserConsumer+Timeline.h",
-                    "CSSPropertyParserConsumer+Transform.h",
-                    "CSSPropertyParserConsumer+Transitions.h",
-                    "CSSPropertyParserConsumer+UI.h",
-                    "CSSPropertyParserConsumer+URL.h",
-                    "CSSPropertyParserConsumer+UnicodeRange.h",
-                    "CSSPropertyParserConsumer+ViewTransition.h",
-                    "CSSPropertyParserConsumer+WillChange.h",
+                    "CSSPropertyParserCustom.h",
                     "CSSPropertyParserState.h",
-                    "CSSQuadValue.h",
-                    "CSSTransformListValue.h",
-                    "CSSValuePair.h",
-                    "CSSValuePool.h",
                     "DeprecatedGlobalSettings.h",
                 ]
             )
@@ -4619,7 +4961,11 @@ class GenerateCSSPropertyParsing:
                 )
 
                 for parsing_collection in self.all_property_parsing_collections:
-                    self._generate_css_property_parsing_cpp_parse_property(
+                    self._generate_css_property_parsing_cpp_parse_longhand_property(
+                        to=writer,
+                        parsing_collection=parsing_collection
+                    )
+                    self._generate_css_property_parsing_cpp_parse_shorthand_property(
                         to=writer,
                         parsing_collection=parsing_collection
                     )
@@ -4645,8 +4991,11 @@ class GenerateCSSPropertyParsing:
 
         with to.indent():
             for parsing_collection in self.all_property_parsing_collections:
-                to.write(f"// Parse and return a single longhand {parsing_collection.name} {parsing_collection.noun}.")
-                to.write(f"static RefPtr<CSSValue> parse{parsing_collection.id}(CSSParserTokenRange&, CSSPropertyID id, CSS::PropertyParserState&);")
+                to.write(f"// Parse and return a single {'longhand ' if parsing_collection.supports_shorthands else ''}{parsing_collection.name} {parsing_collection.noun}.")
+                to.write(f"static RefPtr<CSSValue> parse{parsing_collection.id}{'Longhand' if parsing_collection.supports_shorthands else ''}(CSSParserTokenRange&, CSSPropertyID, CSS::PropertyParserState&);")
+                if parsing_collection.supports_shorthands:
+                    to.write(f"// Parse a shorthand {parsing_collection.name} {parsing_collection.noun}, adding longhands to the provided result collection. Returns true on success, false on failure.")
+                    to.write(f"static bool parse{parsing_collection.id}Shorthand(CSSParserTokenRange&, CSSPropertyID, CSS::PropertyParserState&, CSS::PropertyParserResult&);")
                 to.write(f"// Fast path bare-keyword support.")
                 to.write(f"static bool isKeywordValidFor{parsing_collection.id}(CSSPropertyID, CSSValueID, CSS::PropertyParserState&);")
                 to.write(f"static bool isKeywordFastPathEligible{parsing_collection.id}(CSSPropertyID);")
@@ -4726,8 +5075,8 @@ class GenerateCSSPropertyParsing:
         for shared_grammar_rule_consumer in self.all_shared_grammar_rule_consumers:
             shared_grammar_rule_consumer.generate_definition(to=to)
 
-    def _generate_css_property_parsing_cpp_parse_property(self, *, to, parsing_collection):
-        to.write(f"RefPtr<CSSValue> CSSPropertyParsing::parse{parsing_collection.id}(CSSParserTokenRange& range, CSSPropertyID id, CSS::PropertyParserState& state)")
+    def _generate_css_property_parsing_cpp_parse_longhand_property(self, *, to, parsing_collection):
+        to.write(f"RefPtr<CSSValue> CSSPropertyParsing::parse{parsing_collection.id}{'Longhand' if parsing_collection.supports_shorthands else ''}(CSSParserTokenRange& range, CSSPropertyID id, CSS::PropertyParserState& state)")
 
         to.write(f"{{")
         with to.indent():
@@ -4781,6 +5130,47 @@ class GenerateCSSPropertyParsing:
             to.write(f"default:")
             with to.indent():
                 to.write(f"return {{ }};")
+            to.write(f"}}")
+        to.write(f"}}")
+        to.newline()
+
+    def _generate_css_property_parsing_cpp_parse_shorthand_property(self, *, to, parsing_collection):
+        if not parsing_collection.supports_shorthands:
+            return
+        to.write(f"bool CSSPropertyParsing::parse{parsing_collection.id}Shorthand(CSSParserTokenRange& range, CSSPropertyID id, CSS::PropertyParserState& state, CSS::PropertyParserResult& result)")
+
+        to.write(f"{{")
+        with to.indent():
+            to.write(f"ASSERT(isShorthand(id));")
+            to.newline()
+
+            to.write(f"switch (id) {{")
+
+            for consumer in parsing_collection.consumers:
+                if not consumer.property.codegen_properties.longhands:
+                    continue
+                if consumer.property.codegen_properties.skip_parser:
+                    continue
+
+                to.write(f"case {consumer.property.id}:")
+                with to.indent():
+                    if consumer.property.codegen_properties.settings_flag and not consumer.property.codegen_properties.internal_only:
+                        to.write(f"if (!state.context.propertySettings.{consumer.property.codegen_properties.settings_flag}) {{")
+                        with to.indent():
+                            to.write(f"ASSERT_NOT_REACHED();")
+                            to.write(f"return false;")
+                        to.write(f"}}")
+
+                    if consumer.property.codegen_properties.parser_function:
+                        to.write(f"return CSS::PropertyParserCustom::{consumer.property.codegen_properties.parser_function}(range, state, {consumer.property.codegen_properties.parser_shorthand}(), result);")
+                    elif consumer.property.codegen_properties.shorthand_parser_pattern:
+                        to.write(f"return CSS::PropertyParserCustom::consume{consumer.property.codegen_properties.shorthand_parser_pattern}Shorthand(range, state, {consumer.property.codegen_properties.parser_shorthand}(), result);")
+                    else:
+                        raise Exception(f"Shorthand property '{consumer.property}' has unknown parsing method.")
+
+            to.write(f"default:")
+            with to.indent():
+                to.write(f"return false;")
             to.write(f"}}")
         to.write(f"}}")
         to.newline()
@@ -6994,11 +7384,11 @@ class BNFRepetitionModifier:
         if self.kind is None:
             return "[UNSET RepetitionModifier]"
         elif self.kind == BNFRepetitionModifier.Kind.EXACT:
-            return '{' + self.min + '}'
+            return '{' + str(self.min) + '}'
         elif self.kind == BNFRepetitionModifier.Kind.AT_LEAST:
-            return '{' + self.min + ',}'
+            return '{' + str(self.min) + ',}'
         elif self.kind == BNFRepetitionModifier.Kind.BETWEEN:
-            return '{' + self.min + ',' + self.max + '}'
+            return '{' + str(self.min) + ',' + str(self.max) + '}'
         raise Exception("Unknown repetition kind: {self.kind}")
 
 
@@ -7401,6 +7791,8 @@ class BNFParserState(enum.Enum):
     INTERNAL_REFERENCE_INITIAL = enum.auto()
     INTERNAL_REFERENCE_SEEN_ID = enum.auto()
     REFERENCE_INITIAL = enum.auto()
+    REFERENCE_SEEN_QUOTE_OPEN = enum.auto()
+    REFERENCE_SEEN_QUOTE_AND_ID = enum.auto()
     REFERENCE_SEEN_FUNCTION_OPEN = enum.auto()
     REFERENCE_SEEN_ID_OR_FUNCTION = enum.auto()
     REFERENCE_STRING_ATTRIBUTE_INITIAL = enum.auto()
@@ -7469,6 +7861,8 @@ class BNFParser:
             BNFParserState.INTERNAL_REFERENCE_INITIAL: BNFParser.parse_INTERNAL_REFERENCE_INITIAL,
             BNFParserState.INTERNAL_REFERENCE_SEEN_ID: BNFParser.parse_INTERNAL_REFERENCE_SEEN_ID,
             BNFParserState.REFERENCE_INITIAL: BNFParser.parse_REFERENCE_INITIAL,
+            BNFParserState.REFERENCE_SEEN_QUOTE_OPEN: BNFParser.parse_REFERENCE_SEEN_QUOTE_OPEN,
+            BNFParserState.REFERENCE_SEEN_QUOTE_AND_ID: BNFParser.parse_REFERENCE_SEEN_QUOTE_AND_ID,
             BNFParserState.REFERENCE_SEEN_FUNCTION_OPEN: BNFParser.parse_REFERENCE_SEEN_FUNCTION_OPEN,
             BNFParserState.REFERENCE_SEEN_ID_OR_FUNCTION: BNFParser.parse_REFERENCE_SEEN_ID_OR_FUNCTION,
             BNFParserState.REFERENCE_STRING_ATTRIBUTE_INITIAL: BNFParser.parse_REFERENCE_STRING_ATTRIBUTE_INITIAL,
@@ -7867,6 +8261,10 @@ class BNFParser:
             self.enter_new_function(token, state)
             return
 
+        if token.name == BNFToken.LBRACE:
+            self.enter_new_repetition_modifier(token, state)
+            return
+
         if token.name in BNFParser.SIMPLE_MULTIPLIERS:
             self.process_simple_multiplier(token, state)
             return
@@ -7951,6 +8349,30 @@ class BNFParser:
         if token.name == BNFToken.ID:
             self.transition_top(to=BNFParserState.REFERENCE_SEEN_ID_OR_FUNCTION)
             state.node.name = token.value
+            return
+
+        if token.name == BNFToken.SQUOTE:
+            self.transition_top(to=BNFParserState.REFERENCE_SEEN_QUOTE_OPEN)
+            return
+
+        if token.name == BNFToken.ID:
+            self.transition_top(to=BNFParserState.REFERENCE_SEEN_ID_OR_FUNCTION)
+            state.node.name = token.value
+            return
+
+        raise self.unexpected(token, state)
+
+    def parse_REFERENCE_SEEN_QUOTE_OPEN(self, token, state):
+        if token.name == BNFToken.ID:
+            self.transition_top(to=BNFParserState.REFERENCE_SEEN_QUOTE_AND_ID)
+            state.node.name = "'" + token.value + "'"
+            return
+
+        raise self.unexpected(token, state)
+
+    def parse_REFERENCE_SEEN_QUOTE_AND_ID(self, token, state):
+        if token.name == BNFToken.SQUOTE:
+            self.transition_top(to=BNFParserState.REFERENCE_SEEN_ID_OR_FUNCTION)
             return
 
         raise self.unexpected(token, state)
@@ -8228,6 +8650,7 @@ def main():
         GenerateCSSPropertyParsing,
         GenerateCSSStylePropertiesPropertyNames,
         GenerateStyleBuilderGenerated,
+        GenerateStyleExtractorGenerated,
         GenerateStyleInterpolationWrapperMap,
         GenerateStylePropertyShorthandFunctions,
     ]

@@ -1,4 +1,4 @@
-# Copyright (C) 2023-2024 Apple Inc. All rights reserved.
+# Copyright (C) 2023-2025 Apple Inc. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -121,10 +121,10 @@ end
 macro popQuad(reg)
     # FIXME: emit post-increment in offlineasm
     if ARM64 or ARM64E
-        loadqinc [sp], reg, 16
+        loadqinc [sp], reg, V128ISize
     elsif X86_64
         loadq [sp], reg
-        addq 16, sp
+        addq V128ISize, sp
     else
         break
     end
@@ -188,7 +188,8 @@ const argumINTEnd = csr3
 const argumINTDsp = csr4
 
 macro ipintEntry()
-    checkStackOverflow(ws0, argumINTEnd)
+    const argumINTEndAsScratch = argumINTEnd
+    checkStackOverflow(ws0, argumINTEndAsScratch)
 
     # Allocate space for locals and rethrow values
     if ARM64 or ARM64E
@@ -197,8 +198,9 @@ macro ipintEntry()
         loadi Wasm::IPIntCallee::m_localSizeToAlloc[ws0], argumINTTmp
         loadi Wasm::IPIntCallee::m_numRethrowSlotsToAlloc[ws0], argumINTEnd
     end
-    addq argumINTEnd, argumINTTmp
+    mulq LocalSize, argumINTEnd
     mulq LocalSize, argumINTTmp
+    subq argumINTEnd, sp
     move sp, argumINTEnd
     subq argumINTTmp, sp
     move sp, argumINTDsp
@@ -451,14 +453,14 @@ ipintOp(_br, macro()
     #
     # [sp + k + numToPop] = [sp + k] for k in numToKeep-1 -> 0
     move t0, t2
-    lshiftq StackValueShift, t2
+    mulq StackValueSize, t2
     leap [sp, t2], t2
 
 .ipint_br_poploop:
     bqeq t1, 0, .ipint_br_popend
     subq 1, t1
     move t1, t3
-    lshiftq StackValueShift, t3
+    mulq StackValueSize, t3
     loadq [sp, t3], t0
     storeq t0, [t2, t3]
     loadq 8[sp, t3], t0
@@ -466,7 +468,7 @@ ipintOp(_br, macro()
     jmp .ipint_br_poploop
 .ipint_br_popend:
     loadh IPInt::BranchTargetMetadata::toPop[MC], t0
-    lshiftq StackValueShift, t0
+    mulq StackValueSize, t0
     leap [sp, t0], sp
 
 if ARM64 or ARM64E
@@ -3165,6 +3167,9 @@ reservedOpcode(0xf8)
 reservedOpcode(0xf9)
 reservedOpcode(0xfa)
 
+# If the following four instructions are given more descriptive names,
+# the changes should be matched in IPINT_INSTRUCTIONS in Tools/lldb/debug_ipint.py
+
 ipintOp(_fb_block, macro()
     decodeLEBVarUInt32(1, t0, t1, t2, t3, t4)
     # Security guarantee: always less than 30 (0x00 -> 0x1e)
@@ -3353,7 +3358,7 @@ ipintOp(_array_new_fixed, macro()
 
     # pop all the arguments
     loadi IPInt::ArrayNewFixedMetadata::arraySize[MC], t3 # array length
-    lshifti StackValueShift, t3
+    muli StackValueSize, t3
     addp t3, sp
 
     pushQuad(r0)
@@ -3615,11 +3620,10 @@ end)
 
 ipintOp(_ref_i31, macro()
     popInt32(t0, t1)
-    andq 0x7fffffff, t0
     lshifti 0x1, t0
     rshifti 0x1, t0
     orq TagNumber, t0
-    pushInt32(t0)
+    pushQuad(t0)
 
     advancePC(2)
     nextIPIntInstruction()
@@ -5951,12 +5955,12 @@ const mintSS = sc1
 
 macro mintPop(reg)
     loadq [mintSS], reg
-    addq 16, mintSS
+    addq V128ISize, mintSS
 end
 
 macro mintPopF(reg)
     loadd [mintSS], reg
-    addq 16, mintSS
+    addq V128ISize, mintSS
 end
 
 macro mintArgDispatch()
@@ -6028,9 +6032,9 @@ end
 
     loadi IPInt::CallSignatureMetadata::stackFrameSize[MC], stackFrameSize
     loadh IPInt::CallSignatureMetadata::numExtraResults[MC], extraSpaceForReturns
-    lshiftq StackValueShift, extraSpaceForReturns
+    mulq StackValueSize, extraSpaceForReturns
     loadh IPInt::CallSignatureMetadata::numArguments[MC], numArguments
-    lshiftq StackValueShift, numArguments
+    mulq StackValueSize, numArguments
     advanceMC(constexpr (sizeof(IPInt::CallSignatureMetadata)))
 
     # calculate the SP after popping all arguments

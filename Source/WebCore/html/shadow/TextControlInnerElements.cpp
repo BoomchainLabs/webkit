@@ -95,7 +95,7 @@ static inline bool isNumberInput(const Element* element)
 }
 #endif
 
-std::optional<Style::UnadjustedStyle> TextControlInnerContainer::resolveCustomStyle(const Style::ResolutionContext& resolutionContext, const RenderStyle*)
+std::optional<Style::UnadjustedStyle> TextControlInnerContainer::resolveCustomStyle(const Style::ResolutionContext& resolutionContext, const RenderStyle* shadowHostStyle)
 {
     auto elementStyle = resolveStyle(resolutionContext);
     if (isStrongPasswordTextField(shadowHost())) {
@@ -103,6 +103,9 @@ std::optional<Style::UnadjustedStyle> TextControlInnerContainer::resolveCustomSt
         elementStyle.style->setOverflowX(Overflow::Hidden);
         elementStyle.style->setOverflowY(Overflow::Hidden);
     }
+
+    if (shadowHostStyle)
+        RenderTheme::singleton().adjustTextControlInnerContainerStyle(*elementStyle.style, *shadowHostStyle, shadowHost());
 
     return elementStyle;
 }
@@ -172,7 +175,7 @@ void TextControlInnerTextElement::updateInnerTextElementEditabilityImpl(bool isE
     const auto& value = isEditable ? plaintextOnlyAtom() : falseAtom();
     if (initialization) {
         Attribute attribute(contenteditableAttr, value);
-        parserSetAttributes(std::span(&attribute, 1));
+        parserSetAttributes(singleElementSpan(attribute));
     } else
         setAttributeWithoutSynchronization(contenteditableAttr, value);
 }
@@ -208,6 +211,10 @@ RenderTextControlInnerBlock* TextControlInnerTextElement::renderer() const
 std::optional<Style::UnadjustedStyle> TextControlInnerTextElement::resolveCustomStyle(const Style::ResolutionContext&, const RenderStyle* shadowHostStyle)
 {
     auto style = downcast<HTMLTextFormControlElement>(*shadowHost()).createInnerTextStyle(*shadowHostStyle);
+
+    if (shadowHostStyle)
+        RenderTheme::singleton().adjustTextControlInnerTextStyle(style, *shadowHostStyle, shadowHost());
+
     return Style::UnadjustedStyle { makeUnique<RenderStyle>(WTFMove(style)) };
 }
 
@@ -238,6 +245,10 @@ std::optional<Style::UnadjustedStyle> TextControlPlaceholderElement::resolveCust
         style.style->setPaddingTop(Length { 0, LengthType::Fixed });
         style.style->setPaddingBottom(Length { 0, LengthType::Fixed });
     }
+
+    if (shadowHostStyle)
+        RenderTheme::singleton().adjustTextControlInnerPlaceholderStyle(*style.style, *shadowHostStyle, shadowHost());
+
     return style;
 }
 

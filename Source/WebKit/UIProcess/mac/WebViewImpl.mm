@@ -104,6 +104,7 @@
 #import <WebCore/FixedContainerEdges.h>
 #import <WebCore/FontAttributeChanges.h>
 #import <WebCore/FontAttributes.h>
+#import <WebCore/ImageAdapter.h>
 #import <WebCore/LegacyNSPasteboardTypes.h>
 #import <WebCore/LoaderNSURLExtras.h>
 #import <WebCore/LocalizedStrings.h>
@@ -127,6 +128,7 @@
 #import <WebCore/WebCoreFullScreenWindow.h>
 #import <WebCore/WebCoreNSFontManagerExtras.h>
 #import <WebCore/WebPlaybackControlsManager.h>
+#import <WebCore/WebTextIndicatorLayer.h>
 #import <WebKit/WKShareSheet.h>
 #import <WebKit/WKWebViewPrivate.h>
 #import <WebKit/WebBackForwardList.h>
@@ -1374,9 +1376,7 @@ WebViewImpl::WebViewImpl(WKWebView *view, WebProcessPool& processPool, Ref<API::
     m_page->setFullscreenClient(makeUnique<WebKit::FullscreenClient>(view));
 #endif
 
-#if HAVE(NSSCROLLVIEW_SEPARATOR_TRACKING_ADAPTER)
     m_lastScrollViewFrame = scrollViewFrame();
-#endif
 
 #if HAVE(REDESIGNED_TEXT_CURSOR) && PLATFORM(MAC)
     m_textInputNotifications = subscribeToTextInputNotifications(this);
@@ -1723,9 +1723,6 @@ RetainPtr<NSSet> WebViewImpl::pdfHUDs()
 
 void WebViewImpl::renewGState()
 {
-    if (m_textIndicatorWindow)
-        dismissContentRelativeChildWindowsWithAnimation(false);
-
     suppressContentRelativeChildViews(ContentRelativeChildViewsSuppressionType::TemporarilyRemove);
 
     // Update the view frame.
@@ -1769,7 +1766,6 @@ void WebViewImpl::updateWindowAndViewFrames()
     if (clipsToVisibleRect())
         updateViewExposedRect();
 
-#if HAVE(NSSCROLLVIEW_SEPARATOR_TRACKING_ADAPTER)
     NSRect scrollViewFrame = this->scrollViewFrame();
     if (!NSEqualRects(m_lastScrollViewFrame, scrollViewFrame)) {
         m_lastScrollViewFrame = scrollViewFrame;
@@ -1777,7 +1773,6 @@ void WebViewImpl::updateWindowAndViewFrames()
     }
 
     updateTitlebarAdjacencyState();
-#endif
 
     if (m_didScheduleWindowAndViewFrameUpdate)
         return;
@@ -2266,12 +2261,10 @@ void WebViewImpl::viewWillMoveToWindowImpl(NSWindow *window)
     if (!m_isPreparingToUnparentView)
         [m_windowVisibilityObserver startObserving:window];
 
-#if HAVE(NSSCROLLVIEW_SEPARATOR_TRACKING_ADAPTER)
     if (m_isRegisteredScrollViewSeparatorTrackingAdapter) {
         [currentWindow unregisterScrollViewSeparatorTrackingAdapter:(NSObject<NSScrollViewSeparatorTrackingAdapter> *)m_view.get().get()];
         m_isRegisteredScrollViewSeparatorTrackingAdapter = false;
     }
-#endif
 }
 
 void WebViewImpl::viewWillMoveToWindow(NSWindow *window)
@@ -2344,18 +2337,14 @@ void WebViewImpl::viewDidHide()
 {
     LOG(ActivityState, "WebViewImpl %p (page %llu) viewDidHide", this, m_page->identifier().toUInt64());
     m_page->activityStateDidChange(WebCore::ActivityState::IsVisible);
-#if HAVE(NSSCROLLVIEW_SEPARATOR_TRACKING_ADAPTER)
     updateTitlebarAdjacencyState();
-#endif
 }
 
 void WebViewImpl::viewDidUnhide()
 {
     LOG(ActivityState, "WebViewImpl %p (page %llu) viewDidUnhide", this, m_page->identifier().toUInt64());
     m_page->activityStateDidChange(WebCore::ActivityState::IsVisible);
-#if HAVE(NSSCROLLVIEW_SEPARATOR_TRACKING_ADAPTER)
     updateTitlebarAdjacencyState();
-#endif
 }
 
 void WebViewImpl::activeSpaceDidChange()
@@ -2366,7 +2355,6 @@ void WebViewImpl::activeSpaceDidChange()
 
 void WebViewImpl::pageDidScroll(const IntPoint& scrollPosition)
 {
-#if HAVE(NSSCROLLVIEW_SEPARATOR_TRACKING_ADAPTER)
     bool pageIsScrolledToTop = scrollPosition.y() <= 0;
     if (pageIsScrolledToTop == m_pageIsScrolledToTop)
         return;
@@ -2380,14 +2368,15 @@ void WebViewImpl::pageDidScroll(const IntPoint& scrollPosition)
 #endif
 
     [m_view didChangeValueForKey:@"hasScrolledContentsUnderTitlebar"];
-#endif // HAVE(NSSCROLLVIEW_SEPARATOR_TRACKING_ADAPTER)
 }
-
-#if HAVE(NSSCROLLVIEW_SEPARATOR_TRACKING_ADAPTER)
 
 NSRect WebViewImpl::scrollViewFrame()
 {
-    return [m_view convertRect:[m_view bounds] toView:nil];
+    auto insets = obscuredContentInsets();
+    FloatRect boundsAdjustedByHorizontalInsets = [m_view bounds];
+    boundsAdjustedByHorizontalInsets.shiftXEdgeBy(insets.left());
+    boundsAdjustedByHorizontalInsets.shiftMaxXEdgeBy(-insets.right());
+    return [m_view convertRect:boundsAdjustedByHorizontalInsets toView:nil];
 }
 
 bool WebViewImpl::hasScrolledContentsUnderTitlebar()
@@ -2411,8 +2400,6 @@ void WebViewImpl::updateTitlebarAdjacencyState()
         m_isRegisteredScrollViewSeparatorTrackingAdapter = false;
     }
 }
-
-#endif // HAVE(NSSCROLLVIEW_SEPARATOR_TRACKING_ADAPTER)
 
 void WebViewImpl::scrollToRect(const WebCore::FloatRect& targetRect, const WebCore::FloatPoint& origin)
 {
@@ -2774,7 +2761,9 @@ bool WebViewImpl::writeSelectionToPasteboard(NSPasteboard *pasteboard, NSArray *
     size_t numTypes = types.count;
     [pasteboard declareTypes:types owner:nil];
     for (size_t i = 0; i < numTypes; ++i) {
-        if ([[types objectAtIndex:i] isEqualTo:WebCore::legacyStringPasteboardType()])
+        BOOL wantsPlainText = [[types objectAtIndex:i] isEqualTo:WebCore::legacyStringPasteboardType()];
+        RELEASE_LOG(Pasteboard, "Synchronously requesting %{public}s for selected range", wantsPlainText ? "plain text" : "data");
+        if (wantsPlainText)
             [pasteboard setString:m_page->stringSelectionForPasteboard().createNSString().get() forType:WebCore::legacyStringPasteboardType()];
         else {
             RefPtr<WebCore::SharedBuffer> buffer = m_page->dataSelectionForPasteboard([types objectAtIndex:i]);
@@ -2875,15 +2864,15 @@ void WebViewImpl::shareSheetDidDismiss(WKShareSheet *shareSheet)
 }
 
 #if HAVE(DIGITAL_CREDENTIALS_UI)
-void WebViewImpl::showDigitalCredentialsPicker(const WebCore::DigitalCredentialsRequestData& requestData, WTF::CompletionHandler<void(Expected<WebCore::DigitalCredentialsResponseData, WebCore::ExceptionData>&&)>&& completionHandler, WKWebView* webView)
+void WebViewImpl::showDigitalCredentialsPicker(const WebCore::DigitalCredentialsRequestData& requestData, CompletionHandler<void(Expected<WebCore::DigitalCredentialsResponseData, WebCore::ExceptionData>&&)>&& completionHandler, WKWebView* webView)
 {
     if (!_digitalCredentialsPicker)
-        _digitalCredentialsPicker = adoptNS([[WKDigitalCredentialsPicker alloc] initWithView:webView]);
+        _digitalCredentialsPicker = adoptNS([[WKDigitalCredentialsPicker alloc] initWithView:webView page:m_page.ptr()]);
 
     [_digitalCredentialsPicker presentWithRequestData:requestData completionHandler:WTFMove(completionHandler)];
 }
 
-void WebViewImpl::dismissDigitalCredentialsPicker(WTF::CompletionHandler<void(bool)>&& completionHandler, WKWebView* webView)
+void WebViewImpl::dismissDigitalCredentialsPicker(CompletionHandler<void(bool)>&& completionHandler, WKWebView* webView)
 {
     if (!_digitalCredentialsPicker) {
         LOG(DigitalCredentials, "Digital credentials picker is not being presented.");
@@ -3458,37 +3447,9 @@ void WebViewImpl::preferencesDidChange()
         updateWindowAndViewFrames();
 }
 
-void WebViewImpl::setTextIndicator(WebCore::TextIndicator& textIndicator, WebCore::TextIndicatorLifetime lifetime)
+CALayer* WebViewImpl::textIndicatorInstallationLayer()
 {
-    if (!m_textIndicatorWindow)
-        m_textIndicatorWindow = makeUnique<WebCore::TextIndicatorWindow>(m_view.getAutoreleased());
-
-    NSRect textBoundingRectInScreenCoordinates = [[m_view window] convertRectToScreen:[m_view convertRect:textIndicator.textBoundingRectInRootViewCoordinates() toView:nil]];
-
-    m_textIndicatorWindow->setTextIndicator(textIndicator, NSRectToCGRect(textBoundingRectInScreenCoordinates), lifetime);
-}
-
-void WebViewImpl::updateTextIndicator(WebCore::TextIndicator& textIndicator)
-{
-    if (!m_textIndicatorWindow)
-        m_textIndicatorWindow = makeUnique<WebCore::TextIndicatorWindow>(m_view.getAutoreleased());
-
-    NSRect textBoundingRectInScreenCoordinates = [[m_view window] convertRectToScreen:[m_view convertRect:textIndicator.textBoundingRectInRootViewCoordinates() toView:nil]];
-
-    m_textIndicatorWindow->updateTextIndicator(textIndicator, NSRectToCGRect(textBoundingRectInScreenCoordinates));
-}
-
-void WebViewImpl::clearTextIndicatorWithAnimation(WebCore::TextIndicatorDismissalAnimation animation)
-{
-    if (m_textIndicatorWindow)
-        m_textIndicatorWindow->clearTextIndicator(animation);
-    m_textIndicatorWindow = nullptr;
-}
-
-void WebViewImpl::setTextIndicatorAnimationProgress(float progress)
-{
-    if (m_textIndicatorWindow)
-        m_textIndicatorWindow->setAnimationProgress(progress);
+    return [m_layerHostingView layer];
 }
 
 void WebViewImpl::dismissContentRelativeChildWindowsWithAnimation(bool animate)
@@ -3501,7 +3462,6 @@ void WebViewImpl::dismissContentRelativeChildWindowsWithAnimationFromViewOnly(bo
     // Calling _clearTextIndicatorWithAnimation here will win out over the animated clear in dismissContentRelativeChildWindowsFromViewOnly.
     // We can't invert these because clients can override (and have overridden) _dismissContentRelativeChildWindows, so it needs to be called.
     // For this same reason, this can't be moved to WebViewImpl without care.
-    clearTextIndicatorWithAnimation(animate ? WebCore::TextIndicatorDismissalAnimation::FadeOut : WebCore::TextIndicatorDismissalAnimation::None);
     [m_view _web_dismissContentRelativeChildWindows];
 }
 
@@ -3518,7 +3478,7 @@ void WebViewImpl::dismissContentRelativeChildWindowsFromViewOnly()
             [[PAL::getDDActionsManagerClass() sharedManager] requestBubbleClosureUnanchorOnFailure:YES];
     }
 
-    clearTextIndicatorWithAnimation(WebCore::TextIndicatorDismissalAnimation::FadeOut);
+    m_page->clearTextIndicatorWithAnimation(WebCore::TextIndicatorDismissalAnimation::FadeOut);
 
     [m_immediateActionController dismissContentRelativeChildWindows];
 
@@ -4086,9 +4046,7 @@ void WebViewImpl::draggedImage(NSImage *, CGPoint endPoint, NSDragOperation oper
 
 void WebViewImpl::sendDragEndToPage(CGPoint endPoint, NSDragOperation dragOperationMask)
 {
-ALLOW_DEPRECATED_DECLARATIONS_BEGIN
-    NSPoint windowImageLoc = [[m_view window] convertScreenToBase:NSPointFromCGPoint(endPoint)];
-ALLOW_DEPRECATED_DECLARATIONS_END
+    NSPoint windowImageLoc = [[m_view window] convertPointFromScreen:NSPointFromCGPoint(endPoint)];
     NSPoint windowMouseLoc = windowImageLoc;
 
     // Prevent queued mouseDragged events from coming after the drag and fake mouseUp event.
@@ -5319,11 +5277,8 @@ void WebViewImpl::characterIndexForPoint(NSPoint point, void(^completionHandler)
     LOG(TextInput, "characterIndexForPoint:(%f, %f)", point.x, point.y);
 
     RetainPtr window = [m_view window];
-
-ALLOW_DEPRECATED_DECLARATIONS_BEGIN
     if (window)
-        point = [window convertScreenToBase:point];
-ALLOW_DEPRECATED_DECLARATIONS_END
+        point = [window convertPointFromScreen:point];
     point = [m_view convertPoint:point fromView:nil];  // the point is relative to the main frame
 
     m_page->characterIndexForPointAsync(WebCore::IntPoint(point), [completionHandler = makeBlockPtr(completionHandler)](uint64_t result) {

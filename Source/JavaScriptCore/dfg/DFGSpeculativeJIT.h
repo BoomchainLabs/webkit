@@ -243,8 +243,7 @@ public:
     }
     GPRReg allocate(GPRReg specific)
     {
-        if (specific == InvalidGPRReg)
-            allocate();
+        ASSERT(specific != InvalidGPRReg);
 #if ENABLE(DFG_REGISTER_ALLOCATION_VALIDATION)
         addRegisterAllocationAtOffset(debugOffset());
 #endif
@@ -660,7 +659,7 @@ public:
         case ArithBitLShift:
             lshift32(op1, Imm32(shiftAmount), result);
             break;
-        case BitURShift:
+        case ArithBitURShift:
             urshift32(op1, Imm32(shiftAmount), result);
             break;
         default:
@@ -676,7 +675,7 @@ public:
         case ArithBitLShift:
             lshift32(op1, shiftAmount, result);
             break;
-        case BitURShift:
+        case ArithBitURShift:
             urshift32(op1, shiftAmount, result);
             break;
         default:
@@ -1543,7 +1542,7 @@ public:
     void compileGetPrivateNameById(Node*);
     void compileGetPrivateNameByVal(Node*, JSValueRegs base, JSValueRegs property);
 
-    void compileGetScope(Node*);
+    void compileGetScopeOrGetEvalScope(Node*);
     void compileSkipScope(Node*);
     void compileGetGlobalObject(Node*);
     void compileGetGlobalThis(Node*);
@@ -1582,6 +1581,7 @@ public:
     void emitUntypedOrBigIntRightShiftBitOp(Node*);
     void compileValueLShiftOp(Node*);
     void compileValueBitRShift(Node*);
+    void compileValueBitURShift(Node*);
     void compileShiftOp(Node*);
 
     template <typename Generator, typename RepatchingFunction, typename NonRepatchingFunction>
@@ -1882,8 +1882,9 @@ public:
     void compileInvalidationPoint(Node*);
     
     void unreachable(Node*);
-    
+
     // Called when we statically determine that a speculation will fail.
+    void terminateUnreachableNode();
     void terminateSpeculativeExecution(ExitKind, JSValueRegs, Node*);
     void terminateSpeculativeExecution(ExitKind, JSValueRegs, Edge);
     
@@ -1985,6 +1986,8 @@ public:
     void checkArray(Node*);
     void arrayify(Node*, GPRReg baseReg, GPRReg propertyReg);
     void arrayify(Node*);
+
+    unsigned appendOSRExit(OSRExit&&);
     
     template<bool strict>
     GPRReg fillSpeculateInt32Internal(Edge, DataFormat& returnFormat);
@@ -2384,10 +2387,6 @@ class JSValueRegsTemporary {
 public:
     JSValueRegsTemporary();
     JSValueRegsTemporary(SpeculativeJIT*);
-    JSValueRegsTemporary(SpeculativeJIT*, GPRReg specificPayload);
-#if USE(JSVALUE32_64)
-    JSValueRegsTemporary(SpeculativeJIT*, GPRReg specificPayload, GPRReg specificTag);
-#endif
     template<typename T>
     JSValueRegsTemporary(SpeculativeJIT*, ReuseTag, T& operand, WhichValueWord resultRegWord = PayloadWord);
     JSValueRegsTemporary(SpeculativeJIT*, ReuseTag, JSValueOperand&);

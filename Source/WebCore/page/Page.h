@@ -25,20 +25,21 @@
 #include "BackForwardItemIdentifier.h"
 #include "BoxExtents.h"
 #include "Color.h"
+#include "DocumentEnums.h"
 #include "FindOptions.h"
 #include "FrameLoaderTypes.h"
 #include "HistoryItem.h"
 #include "IntRectHash.h"
-#include "KeyboardScrollingAnimator.h"
-#include "LayoutMilestone.h"
 #include "LoadSchedulingMode.h"
 #include "MediaSessionGroupIdentifier.h"
+#include "PageIdentifier.h"
 #include "Pagination.h"
 #include "PlaybackTargetClientContextIdentifier.h"
+#include "ProcessSwapDisposition.h"
 #include "RegistrableDomain.h"
+#include "ScriptExecutionContextIdentifier.h"
 #include "ScriptTelemetryCategory.h"
 #include "ScrollTypes.h"
-#include "SpatialBackdropSource.h"
 #include "Supplementable.h"
 #include "Timer.h"
 #include "UserInterfaceLayoutDirection.h"
@@ -73,6 +74,7 @@
 
 namespace JSC {
 class Debugger;
+class JSGlobalObject;
 }
 
 namespace PAL {
@@ -97,6 +99,7 @@ class AccessibilityRootAtspi;
 class ApplePayAMSUIPaymentHandler;
 class ActivityStateChangeObserver;
 class AlternativeTextClient;
+class AnimationTimelinesController;
 class ApplicationCacheStorage;
 class AttachmentElementClient;
 class AuthenticatorCoordinator;
@@ -110,6 +113,7 @@ class ContextMenuController;
 class CookieJar;
 class CryptoClient;
 class DOMRectList;
+class DOMWrapperWorld;
 class DatabaseProvider;
 class DeviceOrientationUpdateProvider;
 class DiagnosticLoggingClient;
@@ -123,7 +127,9 @@ class ElementTargetingController;
 class Element;
 class FocusController;
 class FormData;
+class Frame;
 class HTMLElement;
+class HTMLImageElement;
 class HTMLMediaElement;
 class HistoryItem;
 class HistoryItemClient;
@@ -133,7 +139,7 @@ class ImageOverlayController;
 class InspectorClient;
 class InspectorController;
 class IntSize;
-class WebRTCProvider;
+class KeyboardScrollingAnimator;
 class LayoutRect;
 class LocalFrame;
 class LoginStatus;
@@ -172,6 +178,7 @@ class SocketProvider;
 class SpeechRecognitionProvider;
 class SpeechSynthesisClient;
 class SpeechRecognitionConnection;
+class StorageConnection;
 class StorageNamespace;
 class StorageNamespaceProvider;
 class StorageProvider;
@@ -184,6 +191,8 @@ class ValidatedFormListedElement;
 class ValidationMessageClient;
 class VisibleSelection;
 class VisitedLinkStore;
+class WeakPtrImplWithEventTargetData;
+class WebRTCProvider;
 class WheelEventDeltaFilter;
 class WheelEventTestMonitor;
 class WindowEventLoop;
@@ -212,11 +221,16 @@ struct AXTreeData;
 struct ApplePayAMSUIRequest;
 struct AttributedString;
 struct CharacterRange;
+struct ClientOrigin;
+struct FixedContainerEdges;
 struct NavigationAPIMethodTracker;
 struct ProcessSyncData;
 struct SimpleRange;
+struct SpatialBackdropSource;
+struct SystemPreviewInfo;
 struct TextIndicatorData;
 struct TextRecognitionResult;
+struct ViewportArguments;
 struct WindowFeatures;
 
 using PlatformDisplayID = uint32_t;
@@ -224,13 +238,17 @@ using SharedStringHash = uint32_t;
 
 enum class ActivityState : uint16_t;
 enum class AdvancedPrivacyProtections : uint16_t;
+enum class BoxSide : uint8_t;
+enum class BoxSideFlag : uint8_t;
 enum class CanWrap : bool;
 enum class ContentSecurityPolicyModeForExtension : uint8_t;
 enum class DidWrap : bool;
 enum class DisabledAdaptations : uint8_t;
 enum class DocumentClass : uint16_t;
 enum class EventTrackingRegionsEventType : uint8_t;
+enum class FindOption : uint16_t;
 enum class FilterRenderingMode : uint8_t;
+enum class LayoutMilestone : uint16_t;
 enum class LoginStatusAuthenticationType : uint8_t;
 enum class MediaPlaybackTargetContextMockState : uint8_t;
 enum class MediaProducerMediaState : uint32_t;
@@ -240,6 +258,10 @@ enum class RouteSharingPolicy : uint8_t;
 enum class ShouldRelaxThirdPartyCookieBlocking : bool;
 enum class ShouldTreatAsContinuingLoad : uint8_t;
 enum class VisibilityState : bool;
+
+#if ENABLE(DOM_AUDIO_SESSION)
+enum class DOMAudioSessionType : uint8_t;
+#endif
 
 using MediaProducerMediaStateFlags = OptionSet<MediaProducerMediaState>;
 using MediaProducerMutedStateFlags = OptionSet<MediaProducerMutedState>;
@@ -333,6 +355,7 @@ constexpr auto allRenderingUpdateSteps = updateRenderingSteps | OptionSet<Render
 #endif
 };
 
+using WeakElementEdges = RectEdges<WeakPtr<Element, WeakPtrImplWithEventTargetData>>;
 
 class Page : public RefCountedAndCanMakeWeakPtr<Page>, public Supplementable<Page> {
     WTF_MAKE_TZONE_ALLOCATED_EXPORT(Page, WEBCORE_EXPORT);
@@ -438,7 +461,7 @@ public:
     unsigned subframeCount() const;
 
     void setCurrentKeyboardScrollingAnimator(KeyboardScrollingAnimator*);
-    KeyboardScrollingAnimator* currentKeyboardScrollingAnimator() const { return m_currentKeyboardScrollingAnimator.get(); }
+    KeyboardScrollingAnimator* currentKeyboardScrollingAnimator() const; // Deinfed in PageInlines.h
 
     bool shouldApplyScreenFingerprintingProtections(Document&) const;
 
@@ -738,7 +761,7 @@ public:
 #if ENABLE(WEB_AUTHN)
     AuthenticatorCoordinator& authenticatorCoordinator() { return m_authenticatorCoordinator.get(); }
 #if HAVE(DIGITAL_CREDENTIALS_UI)
-    CredentialRequestCoordinator& credentialRequestCoordinator() { return *m_credentialRequestCoordinator; }
+    CredentialRequestCoordinator& credentialRequestCoordinator() { return m_credentialRequestCoordinator.get(); }
 #endif
 #endif
 
@@ -775,8 +798,8 @@ public:
     WEBCORE_EXPORT void setIsInWindow(bool);
     bool isInWindow() const { return m_activityState.contains(ActivityState::IsInWindow); }
 
-    void setIsClosing() { m_isClosing = true; }
-    bool isClosing() const { return m_isClosing; }
+    void setIsClosing();
+    bool isClosing() const;
 
     void setIsRestoringCachedPage(bool value) { m_isRestoringCachedPage = value; }
     bool isRestoringCachedPage() const { return m_isRestoringCachedPage; }
@@ -886,6 +909,10 @@ public:
     WEBCORE_EXPORT Color themeColor() const;
     WEBCORE_EXPORT Color pageExtendedBackgroundColor() const;
     WEBCORE_EXPORT Color sampledPageTopColor() const;
+
+    WEBCORE_EXPORT void updateFixedContainerEdges(OptionSet<BoxSideFlag>);
+    Color lastTopFixedContainerColor() const;
+    const FixedContainerEdges& fixedContainerEdges() const { return m_fixedContainerEdgesAndElements.first; }
 
 #if ENABLE(WEB_PAGE_SPATIAL_BACKDROP)
     WEBCORE_EXPORT std::optional<SpatialBackdropSource> spatialBackdropSource() const;
@@ -1200,7 +1227,7 @@ public:
 
     void opportunisticallyRunIdleCallbacks(MonotonicTime deadline);
     WEBCORE_EXPORT void performOpportunisticallyScheduledTasks(MonotonicTime deadline);
-    void deleteRemovedNodes();
+    void deleteRemovedNodesAndDetachedRenderers();
     String ensureMediaKeysStorageDirectoryForOrigin(const SecurityOriginData&);
     WEBCORE_EXPORT void setMediaKeysStorageDirectory(const String&);
 
@@ -1305,6 +1332,14 @@ public:
     const String& presentingApplicationBundleIdentifier() const;
     WEBCORE_EXPORT void setPresentingApplicationBundleIdentifier(String&&);
 #endif
+
+#if ENABLE(MODEL_ELEMENT)
+    bool shouldDisableModelLoadDelaysForTesting() const { return m_modelLoadDelaysDisabledForTesting; }
+    void disableModelLoadDelaysForTesting() { m_modelLoadDelaysDisabledForTesting = true; }
+#endif
+
+    bool requiresUserGestureForAudioPlayback() const;
+    bool requiresUserGestureForVideoPlayback() const;
 
 private:
     explicit Page(PageConfiguration&&);
@@ -1565,7 +1600,6 @@ private:
     unsigned m_renderingUpdateCount { 0 };
     bool m_isTrackingRenderingUpdates { false };
 
-    bool m_isClosing { false };
     bool m_isRestoringCachedPage { false };
 
     MediaProducerMediaStateFlags m_mediaState;
@@ -1639,7 +1673,7 @@ private:
     const UniqueRef<AuthenticatorCoordinator> m_authenticatorCoordinator;
 
 #if HAVE(DIGITAL_CREDENTIALS_UI)
-    const RefPtr<CredentialRequestCoordinator> m_credentialRequestCoordinator;
+    const Ref<CredentialRequestCoordinator> m_credentialRequestCoordinator;
 #endif
 
 #endif // ENABLE(WEB_AUTHN)
@@ -1659,9 +1693,9 @@ private:
 #endif
 
     Vector<UserContentURLPattern> m_corsDisablingPatterns;
-    HashSet<String> m_maskedURLSchemes;
+    const HashSet<String> m_maskedURLSchemes;
     Vector<UserStyleSheet> m_userStyleSheetsPendingInjection;
-    std::optional<MemoryCompactLookupOnlyRobinHoodHashSet<String>> m_allowedNetworkHosts;
+    const std::optional<MemoryCompactLookupOnlyRobinHoodHashSet<String>> m_allowedNetworkHosts;
     bool m_isTakingSnapshotsForApplicationSuspension { false };
     bool m_loadsSubresources { true };
     bool m_canUseCredentialStorage { true };
@@ -1677,6 +1711,7 @@ private:
 
     Color m_underPageBackgroundColorOverride;
     std::optional<Color> m_sampledPageTopColor;
+    std::pair<UniqueRef<FixedContainerEdges>, WeakElementEdges> m_fixedContainerEdgesAndElements;
 
     const bool m_httpsUpgradeEnabled { true };
     mutable Markable<MediaSessionGroupIdentifier> m_mediaSessionGroupIdentifier;
@@ -1755,6 +1790,10 @@ private:
 
 #if PLATFORM(COCOA)
     String m_presentingApplicationBundleIdentifier;
+#endif
+
+#if ENABLE(MODEL_ELEMENT)
+    bool m_modelLoadDelaysDisabledForTesting { false };
 #endif
 }; // class Page
 

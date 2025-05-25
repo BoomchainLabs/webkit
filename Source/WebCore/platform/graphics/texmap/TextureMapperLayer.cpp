@@ -40,6 +40,8 @@ namespace WebCore {
 
 WTF_MAKE_TZONE_ALLOCATED_IMPL(TextureMapperLayer);
 
+static constexpr auto s_opacityVisibilityThreshold = 0.01;
+
 class TextureMapperPaintOptions {
 public:
     TextureMapperPaintOptions(TextureMapper& textureMapper)
@@ -409,8 +411,12 @@ void TextureMapperLayer::collectDamage(TextureMapper& textureMapper, Damage& dam
 
 void TextureMapperLayer::collectDamageRecursive(TextureMapperPaintOptions& options, Damage& damage)
 {
-    if (!isVisible())
-        return;
+    if (!isVisible()) {
+        if (m_collectDamageDespiteBeingInvisible)
+            m_collectDamageDespiteBeingInvisible = false;
+        else
+            return;
+    }
 
     SetForScope scopedOpacity(options.opacity, options.opacity * m_currentOpacity);
 
@@ -478,12 +484,13 @@ void TextureMapperLayer::collectDamageSelf(TextureMapperPaintOptions& options, D
     if (targetRect.isEmpty())
         return;
 
-    if ((!isFlattened() || m_flattenedLayer->needsUpdate())
+    if (m_parent
+        && (!isFlattened() || m_flattenedLayer->needsUpdate())
         && !m_state.backgroundColor.isValid()
         && !m_backingStore
         && (!m_state.solidColor.isValid() || !m_state.solidColor.isVisible())
         && !m_contentsLayer) {
-        // Layers that have no visuals on their own should not contribute to the damage.
+        // Layers that have no visuals on their own should not contribute to the damage - except for the root layer.
         return;
     }
 
@@ -724,7 +731,7 @@ bool TextureMapperLayer::isVisible() const
         return false;
     if (!m_state.contentsVisible && m_children.isEmpty())
         return false;
-    if (m_currentOpacity < 0.01)
+    if (m_currentOpacity < s_opacityVisibilityThreshold)
         return false;
     return true;
 }
@@ -1283,7 +1290,7 @@ void TextureMapperLayer::removeFromParent()
     if (m_parent) {
         size_t index = m_parent->m_children.find(this);
         ASSERT(index != notFound);
-        m_parent->m_children.remove(index);
+        m_parent->m_children.removeAt(index);
 #if ENABLE(DAMAGE_TRACKING)
         if (m_parent->canInferDamage()) {
             collectDamageFromLayerAboutToBeRemoved(*this);
@@ -1508,6 +1515,13 @@ bool TextureMapperLayer::syncAnimations(MonotonicTime time)
     m_animations.apply(applicationResults, time);
 
     m_layerTransforms.localTransform = applicationResults.transform.value_or(m_state.transform);
+#if ENABLE(DAMAGE_TRACKING)
+    if (canInferDamage() && m_currentOpacity != applicationResults.opacity.value_or(m_state.opacity)) {
+        damageWholeLayer();
+        if (m_currentOpacity >= s_opacityVisibilityThreshold && applicationResults.opacity.value_or(m_state.opacity) < s_opacityVisibilityThreshold)
+            m_collectDamageDespiteBeingInvisible = true;
+    }
+#endif
     m_currentOpacity = applicationResults.opacity.value_or(m_state.opacity);
     m_currentFilters = applicationResults.filters.value_or(m_state.filters);
 

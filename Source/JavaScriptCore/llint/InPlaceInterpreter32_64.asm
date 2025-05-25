@@ -1,16 +1,46 @@
+# Copyright (C) 2024-2025 Apple Inc. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS''
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS
+# BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+# THE POSSIBILITY OF SUCH DAMAGE.
+
 ##########
 # Macros #
 ##########
 
+const StackValueShift = 4
+
 # Callee Save
+
+const IPIntCalleeSaveSpaceMCPC = -8
+const IPIntCalleeSaveSpaceWI = -12
 
 macro saveIPIntRegisters()
     subp IPIntCalleeSaveSpaceStackAligned, sp
-    store2ia MC, PC, -8[cfr]
+    store2ia MC, PC, IPIntCalleeSaveSpaceMCPC[cfr]
+    storep wasmInstance, IPIntCalleeSaveSpaceWI[cfr]
 end
 
 macro restoreIPIntRegisters()
-    load2ia -8[cfr], MC, PC
+    load2ia IPIntCalleeSaveSpaceMCPC[cfr], MC, PC
+    loadp IPIntCalleeSaveSpaceWI[cfr], wasmInstance
     addp IPIntCalleeSaveSpaceStackAligned, sp
 end
 
@@ -117,7 +147,7 @@ end
 
 macro peekDouble(i, reg)
     if ARMv7
-        loadi (i*16)[sp], reg
+        loadi (i * StackValueSize)[sp], reg
     else
         break
     end
@@ -125,7 +155,7 @@ end
 
 macro peekQuad(i, hi, lo)
     if ARMv7
-        load2ia (i*16)[sp], lo, hi
+        load2ia (i * StackValueSize)[sp], lo, hi
     else
         break
     end
@@ -194,8 +224,9 @@ macro ipintEntry()
     # Allocate space for locals and rethrow values
     loadi Wasm::IPIntCallee::m_localSizeToAlloc[ws0], argumINTTmp
     loadi Wasm::IPIntCallee::m_numRethrowSlotsToAlloc[ws0], argumINTEnd
-    addp argumINTEnd, argumINTTmp
+    mulp LocalSize, argumINTEnd
     mulp LocalSize, argumINTTmp
+    subp argumINTEnd, sp
     move sp, argumINTEnd
     subp argumINTTmp, sp
     move sp, argumINTDsp
@@ -305,9 +336,40 @@ end)
 
 unimplementedInstruction(_try)
 unimplementedInstruction(_catch)
-unimplementedInstruction(_throw)
+
+ipintOp(_throw, macro()
+    saveCallSiteIndex()
+
+    loadp JSWebAssemblyInstance::m_vm[wasmInstance], t0
+    loadp VM::topEntryFrame[t0], t0
+    copyCalleeSavesToEntryFrameCalleeSavesBuffer(t0)
+
+    move cfr, a1
+    move sp, a2
+    loadi IPInt::ThrowMetadata::exceptionIndex[MC], a3
+    operationCall(macro() cCall4(_ipint_extern_throw_exception) end)
+    jumpToException()
+end)
+
 unimplementedInstruction(_rethrow)
-unimplementedInstruction(_throw_ref)
+
+ipintOp(_throw_ref, macro()
+    popQuad(a3, a2)
+    bieq a3, NullTag, .throw_null_ref
+
+    saveCallSiteIndex()
+
+    loadp JSWebAssemblyInstance::m_vm[wasmInstance], t0
+    loadp VM::topEntryFrame[t0], t0
+    copyCalleeSavesToEntryFrameCalleeSavesBuffer(t0)
+
+    move cfr, a1
+    operationCall(macro() cCall4(_ipint_extern_throw_ref) end)
+    jumpToException()
+
+.throw_null_ref:
+    throwException(NullExnReference)
+end)
 
 # MC = location in uINT bytecode
 # csr1, csr0 = tmp # clobbers PC, WI
@@ -361,14 +423,14 @@ ipintOp(_br, macro()
     #
     # [sp + k + numToPop] = [sp + k] for k in numToKeep-1 -> 0
     move t0, t2
-    lshiftp 4, t2
+    lshiftp StackValueShift, t2
     leap [sp, t2], t2
 
 .ipint_br_poploop:
     bpeq t4, 0, .ipint_br_popend
     subp 1, t4
     move t4, t3
-    lshiftp 4, t3
+    lshiftp StackValueShift, t3
     load2ia [sp, t3], t0, t1
     store2ia t0, t1, [t2, t3]
     load2ia 8[sp, t3], t0, t1
@@ -376,7 +438,7 @@ ipintOp(_br, macro()
     jmp .ipint_br_poploop
 .ipint_br_popend:
     loadh IPInt::BranchTargetMetadata::toPop[MC], t0
-    lshiftp 4, t0
+    lshiftp StackValueShift, t0
     leap [sp, t0], sp
     loadi IPInt::BlockMetadata::deltaPC[MC], t0
     loadi IPInt::BlockMetadata::deltaMC[MC], t1
@@ -476,10 +538,92 @@ ipintOp(_call_indirect, macro()
     jmp .ipint_call_common
 end)
 
-unimplementedInstruction(_return_call)
-unimplementedInstruction(_return_call_indirect)
-unimplementedInstruction(_call_ref)
-unimplementedInstruction(_return_call_ref)
+ipintOp(_return_call, macro()
+    saveCallSiteIndex()
+
+    loadb IPInt::TailCallMetadata::length[MC], t0
+    advancePCByReg(t0)
+
+    # get function index
+    loadi IPInt::TailCallMetadata::functionIndex[MC], a1
+
+    subp 16, sp
+    move sp, a2
+
+    # operation returns the entrypoint in r0 and the target instance in r1
+    # this operation stores the boxed Callee into *r2
+    operationCall(macro() cCall3(_ipint_extern_prepare_call) end)
+
+    loadp [sp], IPIntCallCallee
+    loadp 8[sp], IPIntCallFunctionSlot
+    addp 16, sp
+
+    loadi IPInt::TailCallMetadata::callerStackArgSize[MC], t3
+    advanceMC(IPInt::TailCallMetadata::argumentBytecode)
+    jmp .ipint_tail_call_common
+end)
+
+ipintOp(_return_call_indirect, macro()
+    saveCallSiteIndex()
+
+    loadb IPInt::TailCallIndirectMetadata::length[MC], t0
+    advancePCByReg(t0)
+
+    # Get function index by pointer, use it as a return for callee
+    move sp, a2
+
+    # Get callIndirectMetadata
+    move cfr, a1
+    move MC, a3
+    operationCallMayThrow(macro() cCall4(_ipint_extern_prepare_call_indirect) end)
+
+    loadp [sp], IPIntCallCallee
+    loadp 8[sp], IPIntCallFunctionSlot
+    addp 16, sp
+
+    loadi IPInt::TailCallIndirectMetadata::callerStackArgSize[MC], t3
+    advanceMC(IPInt::TailCallIndirectMetadata::argumentBytecode)
+    jmp .ipint_tail_call_common
+end)
+
+ipintOp(_call_ref, macro()
+    saveCallSiteIndex()
+
+    move cfr, a1
+    loadi IPInt::CallRefMetadata::typeIndex[MC], a2
+    move sp, a3
+
+    operationCallMayThrow(macro() cCall4(_ipint_extern_prepare_call_ref) end)
+    loadp [sp], IPIntCallCallee
+    loadp 8[sp], IPIntCallFunctionSlot
+    addp 16, sp
+    
+    loadb IPInt::CallRefMetadata::length[MC], t3
+    advanceMC(IPInt::CallRefMetadata::signature)
+    advancePCByReg(t3)
+
+    jmp .ipint_call_common
+end)
+
+ipintOp(_return_call_ref, macro()
+    saveCallSiteIndex()
+
+    loadb IPInt::TailCallRefMetadata::length[MC], t2
+    advancePCByReg(t2)
+
+    move cfr, a1
+    loadi IPInt::TailCallRefMetadata::typeIndex[MC], a2
+    move sp, a3
+    operationCallMayThrow(macro() cCall4(_ipint_extern_prepare_call_ref) end)
+    loadp [sp], IPIntCallCallee
+    loadp 8[sp], IPIntCallFunctionSlot
+    addp 16, sp
+
+    loadi IPInt::TailCallRefMetadata::callerStackArgSize[MC], t3
+    advanceMC(IPInt::TailCallRefMetadata::argumentBytecode)
+    jmp .ipint_tail_call_common
+end)
+
 reservedOpcode(0x16)
 reservedOpcode(0x17)
 unimplementedInstruction(_delegate)
@@ -527,7 +671,15 @@ end)
 
 reservedOpcode(0x1d)
 reservedOpcode(0x1e)
-unimplementedInstruction(_try_table)
+
+ipintOp(_try_table, macro()
+    # advance MC/PC
+    loadi IPInt::BlockMetadata::deltaPC[MC], t0
+    loadi IPInt::BlockMetadata::deltaMC[MC], t1
+    advancePCByReg(t0)
+    advanceMCByReg(t1)
+    nextIPIntInstruction()
+end)
 
     ###################################
     # 0x20 - 0x26: get and set values #
@@ -2979,7 +3131,7 @@ end)
 
 ipintOp(_br_on_null, macro()
     peekQuad(0, t1, t0)
-    bpeq t1, NullTag, .br_on_null_not_null
+    bineq t1, NullTag, .br_on_null_not_null
 
     # pop the null
     drop()
@@ -3908,6 +4060,7 @@ slowPathLabel(_local_tee)
 # sc0 = mINT shadow stack pointer (tracks the Wasm stack)
 
 const mintSS = sc1
+const mintDst = sc2
 
 macro mintPop(hi, lo)
     load2ia [mintSS], lo, hi
@@ -4029,9 +4182,110 @@ end
     storep IPIntCallFunctionSlot, CodeBlock - CallerFrameAndPCSize[sp]
 
     push targetEntrypoint, targetInstance
-    move t3, csr0
+    move t3, mintDst
 
     move t4, mintSS
+
+    mintArgDispatch()
+
+.ipint_tail_call_common:
+    # Free up r0 to be used as argument register
+
+    #  <caller frame>
+    #  return val
+    #  return val
+    #  argument
+    #  argument
+    #  argument
+    #  argument
+    #  call frame
+    #  call frame      <- cfr
+    #  (IPInt locals)
+    #  (IPInt stack)
+    #  argument 0
+    #  ...
+    #  argument n-1
+    #  argument n      <- sp
+
+    # store entrypoint and target instance on the stack for now
+    push r0, r1
+    push IPIntCallCallee, IPIntCallFunctionSlot
+
+    # keep the top of IPInt stack in mintSS as shadow stack
+    move sp, mintSS
+    # we pushed four values previously, so offset for this
+    addp 16, mintSS
+
+    #  <caller frame>
+    #  return val
+    #  return val
+    #  argument
+    #  argument
+    #  argument
+    #  argument
+    #  call frame
+    #  call frame                  <- cfr
+    #  (IPInt locals)
+    #  (IPInt stack)
+    #  argument 0
+    #  ...
+    #  argument n-1
+    #  argument n                  <- mintSS
+    #  entrypoint, targetInstance
+    #  callee, function info       <- sp
+
+    # determine the location to begin copying stack arguments, starting from the last
+    move cfr, mintDst
+    addp FirstArgumentOffset, mintDst
+    addp t3, mintDst
+
+    #  <caller frame>
+    #  return val                  <- mintDst
+    #  return val
+    #  argument
+    #  argument
+    #  argument
+    #  argument
+    #  call frame
+    #  call frame                  <- cfr
+    #  (IPInt locals)
+    #  (IPInt stack)
+    #  argument 0
+    #  ...
+    #  argument n-1
+    #  argument n                  <- mintSS
+    #  entrypoint, targetInstance
+    #  callee, function info       <- sp
+
+    # get saved MC and PC
+    load2ia IPIntCalleeSaveSpaceMCPC[cfr], t0, t1
+    push t0, t1
+
+    # store the return address and CFR on the stack so we don't lose it
+    loadp ReturnPC[cfr], t0
+    loadp [cfr], t1
+
+    push t0, t1
+
+    #  <caller frame>
+    #  return val                  <- mintDst
+    #  return val
+    #  argument
+    #  argument
+    #  argument
+    #  argument
+    #  call frame
+    #  call frame                  <- cfr
+    #  (IPInt locals)
+    #  (IPInt stack)
+    #  argument 0
+    #  ...
+    #  argument n-1
+    #  argument n                  <- mintSS
+    #  entrypoint, targetInstance
+    #  callee, function info
+    #  saved MC/PC
+    #  return address, saved CFR   <- sp
 
     mintArgDispatch()
 
@@ -4096,13 +4350,13 @@ mintAlign(_fa7)
 
 mintAlign(_stackzero)
     mintPop(t1, t0)
-    store2ia t0, t1, [csr0]
+    store2ia t0, t1, [mintDst]
     mintArgDispatch()
 
 mintAlign(_stackeight)
     mintPop(t1, t0)
-    subp 16, csr0
-    store2ia t0, t1, 8[csr0]
+    subp 16, mintDst
+    store2ia t0, t1, 8[mintDst]
     mintArgDispatch()
 
 mintAlign(_tail_stackzero)
@@ -4112,14 +4366,14 @@ mintAlign(_tail_stackeight)
     break
 
 mintAlign(_gap)
-    subp 16, csr0
+    subp 16, mintDst
     mintArgDispatch()
 
 mintAlign(_tail_gap)
     break
 
 mintAlign(_tail_call)
-    break
+    jmp .ipint_perform_tail_call
 
 mintAlign(_call)
     pop wasmInstance, sc3 # sc3 = targetEntrypoint
@@ -4143,7 +4397,7 @@ mintAlign(_call)
     # reserved
     # reserved
     # argSP, PC
-    # PL, wasmInstance  <- csr0
+    # PL, wasmInstance  <- sc2
     # call frame return
     # call frame return
     # call frame
@@ -4151,8 +4405,8 @@ mintAlign(_call)
     # call frame
     # call frame        <- sp
 
-    loadi IPInt::CallReturnMetadata::stackFrameSize[MC], csr0
-    leap [sp, csr0], csr0
+    loadi IPInt::CallReturnMetadata::stackFrameSize[MC], sc2
+    leap [sp, sc2], sc2
 
     const mintRetSrc = csr1
     const mintRetDst = sc1
@@ -4161,7 +4415,7 @@ mintAlign(_call)
     advanceMC(IPInt::CallReturnMetadata::resultBytecode)
     leap [sp, csr1], mintRetSrc
 
-    loadp 3*MachineRegisterSize[csr0], mintRetDst # load argSP
+    loadp 3*MachineRegisterSize[sc2], mintRetDst # load argSP
 
     mintRetDispatch()
 
@@ -4254,7 +4508,7 @@ mintAlign(_end)
     # return result
     # return result     <- mintRetDst => new SP
     # argSP, PC
-    # PL, wasmInstance  <- csr0
+    # PL, wasmInstance  <- sc2
     # call frame return <- sp
     # call frame return
     # call frame
@@ -4263,9 +4517,9 @@ mintAlign(_end)
     # call frame
 
     # Restore PC, WI, PL
-    loadp 2*MachineRegisterSize[csr0], PC
+    loadp 2*MachineRegisterSize[sc2], PC
     # note: we don't care about argSP anymore
-    load2ia [csr0], wasmInstance, PL
+    load2ia [sc2], wasmInstance, PL
     move mintRetDst, sp
 
     push MC
@@ -4277,6 +4531,104 @@ mintAlign(_end)
         pcrtoaddr _ipint_unreachable, IB
     end)
     nextIPIntInstruction()
+
+.ipint_perform_tail_call:
+
+    #  <caller frame>
+    #  return val                  <- sc2
+    #  return val
+    #  argument
+    #  argument
+    #  argument
+    #  argument
+    #  call frame
+    #  call frame                  <- cfr
+    #  (IPInt locals)
+    #  (IPInt stack)
+    #  argument 0
+    #  ...
+    #  argument n-1
+    #  argument n                  <- mintSS
+    #  entrypoint, targetInstance
+    #  callee, function info
+    #  saved MC/PC
+    #  return address, saved CFR
+    #  stack arguments
+    #  stack arguments
+    #  stack arguments
+    #  stack arguments             <- sp
+
+    # load the size of stack values in, and subtract that from sc2
+    loadi [MC], sc3
+    mulp -SlotSize, sc3
+
+    # copy from sc2 downwards
+.ipint_tail_call_copy_stackargs_loop:
+    btiz sc3, .ipint_tail_call_copy_stackargs_loop_end
+    load2ia [sp], sc0, sc1
+    store2ia sc0, sc1, [sc2, sc3]
+    load2ia 8[sp], sc0, sc1
+    store2ia sc0, sc1, 8[sc2, sc3]
+
+    addp 16, sc3
+    addp 16, sp
+    jmp .ipint_tail_call_copy_stackargs_loop
+
+.ipint_tail_call_copy_stackargs_loop_end:
+
+    # reload it here, which isn't optimal, but we don't really have registers
+    loadi [MC], sc3
+    mulp SlotSize, sc3
+    subp sc3, sc2
+
+    # re-setup the call frame, and load our return address in
+    subp FirstArgumentOffset, sc2
+    pop sc1, lr
+
+    pop PC, MC
+
+    # function info, callee
+    pop sc3, sc0
+
+    # save new Callee
+    store2ia sc0, (constexpr JSValue::NativeCalleeTag), Callee[sc2]
+    storep sc3, CodeBlock[sc2]
+
+    # take off the last two values we stored, and move SP down to make it look like a fresh frame
+    pop sc0, sc3  # sc0 = targetInstance
+
+    #  <caller frame>
+    #  return val
+    #  return val
+    #  ...
+    #  argument
+    #  argument
+    #  argument
+    #  argument
+    #  argument                    <- cfr
+    #  argument
+    #  argument
+    #  <to be frame>
+    #  <to be frame>               <- NEW SP
+    #  <to be frame>               <- sc2
+    #  argument 0
+    #  ...
+    #  argument n-1
+    #  argument n                  <- sc1
+
+    # on ARM: lr = return address
+
+    move sc2, sp
+
+    # saved cfr
+    move sc1, cfr
+
+    # swap instances
+    move sc0, wasmInstance
+
+    addp CallerFrameAndPCSize, sp
+
+    jmp sc3, WasmEntryPtrTag
 
 ###########################################
 # uINT: function return value interpreter #

@@ -43,6 +43,7 @@
 #include "Page.h"
 #include "PermissionsPolicy.h"
 #include "SecurityOrigin.h"
+#include <JavaScriptCore/ConsoleTypes.h>
 #include <wtf/Ref.h>
 #include <wtf/RuntimeApplicationChecks.h>
 #include <wtf/TZoneMallocInlines.h>
@@ -252,7 +253,7 @@ void Geolocation::resetAllGeolocationPermission()
             GeolocationController::from(page.get())->cancelPermissionRequest(*this);
 
         // This return is not technically correct as GeolocationController::cancelPermissionRequest() should have cleared the active request.
-        // Neither iOS nor OS X supports cancelPermissionRequest() (https://bugs.webkit.org/show_bug.cgi?id=89524), so we workaround that and let ongoing requests complete. :(
+        // Neither iOS nor macOS supports cancelPermissionRequest() (https://bugs.webkit.org/show_bug.cgi?id=89524), so we workaround that and let ongoing requests complete. :(
         return;
     }
 
@@ -273,6 +274,11 @@ void Geolocation::resetAllGeolocationPermission()
     m_watchers.getNotifiersVector(watcherCopy);
     for (auto& watcher : watcherCopy)
         startRequest(watcher.get());
+}
+
+Document* Geolocation::document() const
+{
+    return downcast<Document>(scriptExecutionContext());
 }
 
 void Geolocation::stop()
@@ -639,6 +645,7 @@ void Geolocation::requestPermission()
         return;
 
     m_allowGeolocation = InProgress;
+    m_hasBeenRequested = true;
 
     // Ask the embedder: it maintains the geolocation challenge policy itself.
     GeolocationController::from(page)->requestPermission(*this);
@@ -660,6 +667,7 @@ void Geolocation::resetIsAllowed()
 {
     m_allowGeolocation = Unknown;
     revokeAuthorizationTokenIfNecessary();
+    m_hasBeenRequested = false;
 }
 
 void Geolocation::makeSuccessCallbacks(GeolocationPosition& position)

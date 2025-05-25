@@ -43,7 +43,7 @@ static void wpeApplicationAccessibleAtkConstructed(GObject* object)
     G_OBJECT_CLASS(wpe_application_accessible_atk_parent_class)->constructed(object);
 
     auto* accessible = WPE_APPLICATION_ACCESSIBLE_ATK(object);
-    GUniquePtr<GList> toplevels(wpeToplevelList());
+    GUniquePtr<GList> toplevels(wpe_toplevel_list());
     for (GList* iter = toplevels.get(); iter; iter = g_list_next(iter))
         accessible->priv->toplevels.append(WPE_TOPLEVEL(iter->data));
 }
@@ -115,7 +115,7 @@ void wpeApplicationAccessibleAtkToplevelDestroyed(WPEApplicationAccessibleAtk* a
     if (index == notFound)
         return;
 
-    accessible->priv->toplevels.remove(index);
+    accessible->priv->toplevels.removeAt(index);
     g_signal_emit_by_name(accessible, "children-changed::remove", index, toplevelAccessible, nullptr);
     atk_object_set_parent(toplevelAccessible, nullptr);
 }

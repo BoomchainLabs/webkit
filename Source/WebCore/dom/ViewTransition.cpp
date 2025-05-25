@@ -32,7 +32,6 @@
 #include "CSSTransformListValue.h"
 #include "CSSValuePool.h"
 #include "CheckVisibilityOptions.h"
-#include "ComputedStyleExtractor.h"
 #include "ContainerNodeInlines.h"
 #include "Document.h"
 #include "DocumentTimeline.h"
@@ -53,6 +52,8 @@
 #include "RenderStyleInlines.h"
 #include "RenderView.h"
 #include "RenderViewTransitionCapture.h"
+#include "StyleExtractor.h"
+#include "StyleExtractorConverter.h"
 #include "StyleResolver.h"
 #include "StyleScope.h"
 #include "Styleable.h"
@@ -297,7 +298,7 @@ void ViewTransition::callUpdateCallback()
         }
     });
 
-    m_updateCallbackTimeout = protectedDocument()->checkedEventLoop()->scheduleTask(defaultTimeout, TaskSource::DOMManipulation, [weakThis = WeakPtr { *this }] {
+    m_updateCallbackTimeout = document->checkedEventLoop()->scheduleTask(defaultTimeout, TaskSource::DOMManipulation, [weakThis = WeakPtr { *this }] {
         RefPtr protectedThis = weakThis.get();
         LOG_WITH_STREAM(ViewTransitions, stream << "ViewTransition " << protectedThis.get() << " update callback timed out");
         if (!protectedThis)
@@ -404,7 +405,7 @@ static LayoutRect captureOverflowRect(RenderLayerModelObject& renderer)
         return { { }, LayoutSize { frameView->frameRect().width(), frameView->frameRect().height() } };
     }
 
-    return renderer.layer()->calculateLayerBounds(renderer.layer(), LayoutSize(), { RenderLayer::IncludeFilterOutsets, RenderLayer::ExcludeHiddenDescendants, RenderLayer::IncludeCompositedDescendants, RenderLayer::PreserveAncestorFlags });
+    return renderer.layer()->calculateLayerBounds(renderer.layer(), LayoutSize(), { RenderLayer::IncludeFilterOutsets, RenderLayer::ExcludeHiddenDescendants, RenderLayer::IncludeCompositedDescendants, RenderLayer::PreserveAncestorFlags, RenderLayer::ExcludeViewTransitionCapturedDescendants });
 }
 
 // The computed local-to-absolute transform, and layer bounds don't include the position
@@ -438,7 +439,9 @@ static RefPtr<ImageBuffer> snapshotElementVisualOverflowClippedToViewport(LocalF
 
     ASSERT(frame.document());
     RefPtr frameView = frame.document()->view();
-    auto hostWindow = (frameView && frameView->root()) ? RefPtr { frameView->root() }->hostWindow() : nullptr;
+    if (!frameView)
+        return nullptr;
+    auto hostWindow = frameView->root() ? RefPtr { frameView->root() }->hostWindow() : nullptr;
 
     auto buffer = ImageBuffer::create(paintRect.size(), RenderingMode::Accelerated, RenderingPurpose::Snapshot, scaleFactor, DestinationColorSpace::SRGB(), ImageBufferPixelFormat::BGRA8, hostWindow);
     if (!buffer)
@@ -446,11 +449,16 @@ static RefPtr<ImageBuffer> snapshotElementVisualOverflowClippedToViewport(LocalF
 
     buffer->context().translate(-paintRect.location());
 
+    auto oldPaintBehavior = frameView->paintBehavior();
+    frameView->setPaintBehavior(oldPaintBehavior | PaintBehavior::FlattenCompositingLayers | PaintBehavior::Snapshotting);
+
     auto paintFlags = RenderLayer::paintLayerPaintingCompositingAllPhasesFlags();
     paintFlags.add(RenderLayer::PaintLayerFlag::TemporaryClipRects);
     paintFlags.add(RenderLayer::PaintLayerFlag::AppliedTransform);
     paintFlags.add(RenderLayer::PaintLayerFlag::PaintingSkipDescendantViewTransition);
-    layerRenderer->layer()->paint(buffer->context(), paintRect, LayoutSize(), { PaintBehavior::FlattenCompositingLayers, PaintBehavior::Snapshotting }, nullptr, paintFlags);
+    layerRenderer->layer()->paint(buffer->context(), paintRect, LayoutSize(), frameView->paintBehavior(), nullptr, paintFlags);
+
+    frameView->setPaintBehavior(oldPaintBehavior);
 
     return buffer;
 }
@@ -804,17 +812,6 @@ void ViewTransition::clearViewTransition()
     Ref document = *this->document();
     ASSERT(document->activeViewTransition() == this);
 
-    // End animations on pseudo-elements so they can run again.
-    if (RefPtr documentElement = document->documentElement()) {
-        Styleable(*documentElement, Style::PseudoElementIdentifier { PseudoId::ViewTransition }).cancelStyleOriginatedAnimations();
-        for (auto& name : namedElements().keys()) {
-            Styleable(*documentElement, Style::PseudoElementIdentifier { PseudoId::ViewTransitionGroup, name }).cancelStyleOriginatedAnimations();
-            Styleable(*documentElement, Style::PseudoElementIdentifier { PseudoId::ViewTransitionImagePair, name }).cancelStyleOriginatedAnimations();
-            Styleable(*documentElement, Style::PseudoElementIdentifier { PseudoId::ViewTransitionNew, name }).cancelStyleOriginatedAnimations();
-            Styleable(*documentElement, Style::PseudoElementIdentifier { PseudoId::ViewTransitionOld, name }).cancelStyleOriginatedAnimations();
-        }
-    }
-
     for (auto& [name, capturedElement] : m_namedElements.map()) {
         if (auto newStyleable = capturedElement->newElement.styleable())
             newStyleable->setCapturedInViewTransition(nullAtom());
@@ -832,7 +829,7 @@ Ref<MutableStyleProperties> ViewTransition::copyElementBaseProperties(RenderLaye
 {
     std::optional<const Styleable> styleable = Styleable::fromRenderer(renderer);
     ASSERT(styleable);
-    ComputedStyleExtractor styleExtractor(&styleable->element, false, styleable->pseudoElementIdentifier);
+    Style::Extractor styleExtractor { &styleable->element, false, styleable->pseudoElementIdentifier };
 
     CSSPropertyID transitionProperties[] = {
         CSSPropertyWritingMode,
@@ -871,7 +868,7 @@ Ref<MutableStyleProperties> ViewTransition::copyElementBaseProperties(RenderLaye
             transform->translate(size.width() / 2, size.height() / 2);
             transform->translateRight(-size.width() / 2, -size.height() / 2);
 
-            Ref transformListValue = CSSTransformListValue::create(ComputedStyleExtractor::matrixTransformValue(*transform, renderer.style()));
+            Ref transformListValue = CSSTransformListValue::create(Style::ExtractorConverter::convertTransformationMatrix(renderer.style(), *transform));
             props->setProperty(CSSPropertyTransform, WTFMove(transformListValue));
         }
     }

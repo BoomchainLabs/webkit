@@ -249,27 +249,29 @@ bool ContentFilter::continueAfterNotifyFinished(CachedResource& resource)
 }
 
 template <typename Function>
-inline void ContentFilter::forEachContentFilterUntilBlocked(Function&& function)
+void ContentFilter::forEachContentFilterUntilBlocked(Function&& getData)
 {
-    bool allFiltersAllowedLoad { true };
-    for (auto& contentFilter : m_contentFilters) {
-        if (!contentFilter->needsMoreData()) {
-            ASSERT(!contentFilter->didBlockData());
+    unsigned allowedCount = 0;
+    for (Ref contentFilter : m_contentFilters) {
+        if (contentFilter->needsMoreData())
+            getData(contentFilter.get());
+
+        // Still need more data for decision.
+        if (contentFilter->needsMoreData())
+            continue;
+
+        if (!contentFilter->didBlockData()) {
+            ++allowedCount;
             continue;
         }
 
-        function(contentFilter.get());
-
-        if (contentFilter->didBlockData()) {
-            ASSERT(!m_blockingContentFilter.get());
-            m_blockingContentFilter = contentFilter.get();
-            didDecide(State::Blocked);
-            return;
-        } else if (contentFilter->needsMoreData())
-            allFiltersAllowedLoad = false;
+        ASSERT(!m_blockingContentFilter.get());
+        m_blockingContentFilter = contentFilter.get();
+        didDecide(State::Blocked);
+        return;
     }
 
-    if (allFiltersAllowedLoad)
+    if (m_contentFilters.size() == allowedCount)
         didDecide(State::Allowed);
 }
 

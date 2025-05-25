@@ -30,6 +30,7 @@
 
 #import "AudioUtilities.h"
 #import "DeprecatedGlobalSettings.h"
+#import "ImageAdapter.h"
 #import "Logging.h"
 #import "MediaConfiguration.h"
 #import "MediaPlayer.h"
@@ -38,6 +39,7 @@
 #import "Page.h"
 #import "PlatformMediaSession.h"
 #import "PlatformStrategies.h"
+#import "Settings.h"
 #import "SharedBuffer.h"
 #import "VP9UtilitiesCocoa.h"
 #import <pal/SessionID.h>

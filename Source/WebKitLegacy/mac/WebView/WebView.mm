@@ -197,6 +197,7 @@
 #import <WebCore/MemoryCache.h>
 #import <WebCore/MemoryRelease.h>
 #import <WebCore/MutableStyleProperties.h>
+#import <WebCore/NativeImage.h>
 #import <WebCore/NetworkStorageSession.h>
 #import <WebCore/NodeList.h>
 #import <WebCore/Notification.h>
@@ -212,6 +213,7 @@
 #import <WebCore/ProgressTracker.h>
 #import <WebCore/Range.h>
 #import <WebCore/RemoteFrameClient.h>
+#import <WebCore/RemoteFrameGeometryTransformer.h>
 #import <WebCore/RemoteUserInputEventData.h>
 #import <WebCore/RenderStyleInlines.h>
 #import <WebCore/RenderTheme.h>
@@ -283,6 +285,7 @@
 #import <wtf/WorkQueue.h>
 #import <wtf/cocoa/RuntimeApplicationChecksCocoa.h>
 #import <wtf/cocoa/VectorCocoa.h>
+#import <wtf/spi/darwin/ReasonSPI.h>
 #import <wtf/spi/darwin/dyldSPI.h>
 
 #if !PLATFORM(IOS_FAMILY)
@@ -1332,31 +1335,6 @@ static RetainPtr<CFMutableSetRef>& allWebViewsSet()
 
 #endif
 
-#if PLATFORM(IOS) || PLATFORM(VISION)
-static bool needsLaBanquePostaleQuirks()
-{
-    static bool needsQuirks = WTF::IOSApplication::isLaBanquePostale() && !linkedOnOrAfterSDKWithBehavior(SDKAlignedBehavior::NoLaBanquePostaleQuirks);
-    return needsQuirks;
-}
-
-static RetainPtr<NSString> createLaBanquePostaleQuirksScript()
-{
-    NSURL *scriptURL = [[NSBundle bundleForClass:WebView.class] URLForResource:@"LaBanquePostaleQuirks" withExtension:@"js"];
-    NSStringEncoding encoding;
-    return adoptNS([[NSString alloc] initWithContentsOfURL:scriptURL usedEncoding:&encoding error:nullptr]);
-}
-
-- (void)_injectLaBanquePostaleQuirks
-{
-    ASSERT(needsLaBanquePostaleQuirks());
-    static NeverDestroyed<RetainPtr<NSString>> quirksScript = createLaBanquePostaleQuirksScript();
-
-    using namespace WebCore;
-    auto userScript = makeUnique<UserScript>(quirksScript.get().get(), URL(), Vector<String>(), Vector<String>(), UserScriptInjectionTime::DocumentEnd, UserContentInjectedFrames::InjectInAllFrames);
-    _private->group->userContentController().addUserScript(*core(WebScriptWorld.world), WTFMove(userScript));
-}
-#endif
-
 #if PLATFORM(IOS_FAMILY)
 static bool isInternalInstall()
 {
@@ -1544,7 +1522,7 @@ static WebCore::ApplicationCacheStorage& webApplicationCacheStorage()
         makeUniqueRef<WebCryptoClient>(self),
         makeUniqueRef<WebCore::ProcessSyncClient>()
 #if HAVE(DIGITAL_CREDENTIALS_UI)
-        , makeUniqueRef<WebCore::DummyCredentialRequestCoordinatorClient>()
+        , WebCore::DummyCredentialRequestCoordinatorClient::create()
 #endif
     );
 #if !PLATFORM(IOS_FAMILY)
@@ -1583,11 +1561,6 @@ static WebCore::ApplicationCacheStorage& webApplicationCacheStorage()
 
     _private->page->setCanStartMedia([self window]);
     _private->page->settings().setLocalStorageDatabasePath([[self preferences] _localStorageDatabasePath]);
-
-#if PLATFORM(IOS) || PLATFORM(VISION)
-    if (needsLaBanquePostaleQuirks())
-        [self _injectLaBanquePostaleQuirks];
-#endif
 
 #if PLATFORM(IOS_FAMILY)
     // Preserve the behavior we had before <rdar://problem/7580867>
@@ -1806,7 +1779,7 @@ static WebCore::ApplicationCacheStorage& webApplicationCacheStorage()
         makeUniqueRef<WebCryptoClient>(self),
         makeUniqueRef<WebCore::ProcessSyncClient>()
 #if HAVE(DIGITAL_CREDENTIALS_UI)
-        , makeUniqueRef<WebCore::DummyCredentialRequestCoordinatorClient>()
+        , WebCore::DummyCredentialRequestCoordinatorClient::create()
 #endif
     );
 #if ENABLE(DRAG_SUPPORT)
@@ -1928,8 +1901,9 @@ static WebCore::ApplicationCacheStorage& webApplicationCacheStorage()
         return NO;
 
     auto result = Box<std::optional<bool>>::create();
-    localMainFrame->eventHandler().tryToBeginDragAtPoint(WebCore::IntPoint(clientPosition), WebCore::IntPoint(globalPosition), [result] (bool handled) mutable {
-        *result = handled;
+    localMainFrame->eventHandler().tryToBeginDragAtPoint(WebCore::IntPoint(clientPosition), WebCore::IntPoint(globalPosition), [result] (auto handled) mutable {
+        ASSERT_WITH_MESSAGE(handled.has_value(), "tryToBeginDragAtPoint should never run into a RemoteFrame in WebKitLegacy");
+        *result = handled.value_or(false);
     });
     ASSERT_WITH_MESSAGE(*result, "tryToBeginDragAtPoint should always complete synchronously in WebKitLegacy");
     return result->value_or(false);
@@ -5043,6 +5017,9 @@ IGNORE_WARNINGS_END
     if (initialized)
         return;
     initialized = YES;
+
+    if (WTF::CocoaApplication::isAppleApplication() && !((rand() * 100) % 100))
+        os_fault_with_payload(OS_REASON_WEBKIT, 0, nullptr, 0, "WebView initialized", 0);
 
 #if !PLATFORM(IOS_FAMILY)
     JSC::initialize();
@@ -8891,7 +8868,7 @@ FORWARD(toggleUnderline)
 
     if (!_private->fullscreenControllersExiting.isEmpty()) {
         auto controller = _private->fullscreenControllersExiting.first();
-        _private->fullscreenControllersExiting.remove(0);
+        _private->fullscreenControllersExiting.removeAt(0);
 
         [controller exitFullscreen];
         return;

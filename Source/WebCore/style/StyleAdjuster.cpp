@@ -56,6 +56,7 @@
 #include "MathMLElement.h"
 #include "NodeName.h"
 #include "Page.h"
+#include "PathOperation.h"
 #include "Quirks.h"
 #include "RenderBox.h"
 #include "RenderStyleSetters.h"
@@ -717,7 +718,7 @@ void Adjuster::adjust(RenderStyle& style) const
 
     // Let the theme also have a crack at adjusting the style.
     if (style.hasAppearance())
-        adjustThemeStyle(style);
+        adjustThemeStyle(style, m_parentStyle);
 
     // This should be kept in sync with requiresRenderingConsolidationForViewTransition
     if (style.preserves3D()) {
@@ -937,7 +938,7 @@ void Adjuster::adjustAnimatedStyle(RenderStyle& style, OptionSet<AnimationImpact
         style.setUsedZIndex(0);
 }
 
-void Adjuster::adjustThemeStyle(RenderStyle& style) const
+void Adjuster::adjustThemeStyle(RenderStyle& style, const RenderStyle& parentStyle) const
 {
     ASSERT(style.hasAppearance());
     auto isOldWidthAuto = style.width().isAuto();
@@ -945,7 +946,7 @@ void Adjuster::adjustThemeStyle(RenderStyle& style) const
     auto isOldHeightAuto = style.height().isAuto();
     auto isOldMinHeightAuto = style.minHeight().isAuto();
 
-    RenderTheme::singleton().adjustStyle(style, m_element.get());
+    RenderTheme::singleton().adjustStyle(style, parentStyle, m_element.get());
 
     if (style.containsSize()) {
         if (style.containIntrinsicWidthType() != ContainIntrinsicSizeType::None) {

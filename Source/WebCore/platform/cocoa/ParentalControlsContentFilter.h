@@ -61,7 +61,6 @@ private:
 #if HAVE(WEBCONTENTRESTRICTIONS)
     void didReceiveAllowDecisionOnQueue(bool isAllowed, NSData *);
     void updateFilterStateOnMain();
-    void enableURLFilter();
 #endif
 
     RetainPtr<WebFilterEvaluator> m_webFilterEvaluator;

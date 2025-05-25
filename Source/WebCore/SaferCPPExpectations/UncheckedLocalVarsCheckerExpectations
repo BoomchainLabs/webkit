@@ -93,10 +93,8 @@ bindings/js/WebCoreJSClientData.cpp
 contentextensions/ContentExtensionsBackend.cpp
 css/CSSFontSelector.cpp
 css/CSSStyleSheet.cpp
-css/ComputedStyleExtractor.cpp
 css/FontFaceSet.cpp
 css/MediaQueryMatcher.cpp
-css/SVGCSSComputedStyleDeclaration.cpp
 css/SelectorChecker.cpp
 css/SelectorFilter.cpp
 css/StyleAttributeMutationScope.h
@@ -119,7 +117,6 @@ dom/CustomElementReactionQueue.cpp
 dom/DeviceMotionController.cpp
 dom/DeviceOrientationController.cpp
 dom/Document.cpp
-dom/DocumentFragment.cpp
 dom/Element.cpp
 dom/ElementAndTextDescendantIterator.h
 dom/ElementInlines.h
@@ -347,7 +344,6 @@ loader/cache/MemoryCache.cpp
 mathml/MathMLSelectElement.cpp
 page/AutoscrollController.cpp
 page/ContextMenuController.cpp
-page/DOMSelection.cpp
 page/DebugPageOverlays.cpp
 page/DeviceController.cpp
 page/DragController.cpp
@@ -399,7 +395,6 @@ platform/ScrollView.cpp
 platform/Widget.cpp
 platform/animation/AcceleratedEffect.cpp
 platform/cocoa/VideoPresentationModelVideoElement.mm
-platform/graphics/FontCache.cpp
 platform/graphics/GraphicsLayer.cpp
 platform/graphics/SystemFallbackFontCache.cpp
 platform/graphics/ca/GraphicsLayerCA.cpp
@@ -423,7 +418,6 @@ rendering/CaretRectComputation.cpp
 rendering/CounterNode.cpp
 rendering/EllipsisBoxPainter.cpp
 rendering/FixedTableLayout.cpp
-rendering/FlexibleBoxAlgorithm.cpp
 rendering/FloatingObjects.cpp
 rendering/GridBaselineAlignment.cpp
 rendering/GridLayoutFunctions.cpp
@@ -437,7 +431,6 @@ rendering/LegacyInlineIterator.h
 rendering/LegacyInlineIteratorInlines.h
 rendering/LegacyInlineTextBox.cpp
 rendering/LegacyLineLayout.cpp
-rendering/LegacyRootInlineBox.cpp
 rendering/MarkedText.cpp
 rendering/MotionPath.cpp
 rendering/PositionedLayoutConstraints.cpp
@@ -453,6 +446,7 @@ rendering/RenderCounter.cpp
 rendering/RenderDeprecatedFlexibleBox.cpp
 rendering/RenderElement.cpp
 rendering/RenderElement.h
+rendering/RenderElementInlines.h
 rendering/RenderFileUploadControl.cpp
 rendering/RenderFlexibleBox.cpp
 rendering/RenderFragmentContainer.cpp
@@ -619,6 +613,8 @@ style/StyleBuilder.cpp
 style/StyleBuilderConverter.h
 style/StyleBuilderCustom.h
 style/StyleBuilderStateInlines.h
+style/StyleExtractor.cpp
+style/StyleExtractorCustom.h
 style/StyleInterpolationFunctions.h
 style/StyleInvalidationFunctions.h
 style/StyleInvalidator.cpp
@@ -652,7 +648,6 @@ svg/SVGMaskElement.cpp
 svg/SVGSVGElement.cpp
 svg/SVGStopElement.cpp
 svg/SVGSwitchElement.cpp
-svg/SVGTextContentElement.cpp
 svg/SVGToOTFFontConversion.cpp
 svg/SVGUseElement.cpp
 svg/graphics/SVGImage.cpp

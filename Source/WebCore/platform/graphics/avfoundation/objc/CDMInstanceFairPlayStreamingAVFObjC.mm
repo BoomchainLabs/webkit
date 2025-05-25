@@ -32,6 +32,7 @@
 #import "CDMKeySystemConfiguration.h"
 #import "CDMMediaCapability.h"
 #import "ContentKeyGroupFactoryAVFObjC.h"
+#import "ExceptionOr.h"
 #import "InitDataRegistry.h"
 #import "Logging.h"
 #import "MediaSampleAVFObjC.h"
@@ -1234,7 +1235,7 @@ void CDMInstanceSessionFairPlayStreamingAVFObjC::didProvideRequests(Vector<Retai
     auto initDataType = initTypeForRequest(requests.first().get());
     if (initDataType != InitDataRegistry::cencName()) {
         didProvideRequest(requests.first().get());
-        requests.remove(0);
+        requests.removeAt(0);
 
         for (auto& request : requests)
             m_pendingRequests.append({ initDataType, { WTFMove(request) } });
@@ -1497,7 +1498,7 @@ void CDMInstanceSessionFairPlayStreamingAVFObjC::nextRequest()
         return;
 
     Request nextRequest = WTFMove(m_pendingRequests.first());
-    m_pendingRequests.remove(0);
+    m_pendingRequests.removeAt(0);
 
     if (nextRequest.requests.isEmpty())
         return;
@@ -1789,13 +1790,12 @@ bool CDMInstanceSessionFairPlayStreamingAVFObjC::isLicenseTypeSupported(LicenseT
 AVContentKey *CDMInstanceSessionFairPlayStreamingAVFObjC::contentKeyForSample(const MediaSampleAVFObjC& sample)
 {
     auto& sampleKeyIDs = sample.keyIDs();
-    size_t keyStatusIndex = 0;
 
     for (auto& request : contentKeyRequests()) {
-        for (auto& keyID : CDMPrivateFairPlayStreaming::keyIDsForRequest(request.get())) {
-            if (!isPotentiallyUsableKeyStatus(m_keyStatuses[keyStatusIndex++].second))
-                continue;
+        if (!isPotentiallyUsableKeyStatus(requestStatusToCDMStatus([request status])))
+            continue;
 
+        for (auto& keyID : CDMPrivateFairPlayStreaming::keyIDsForRequest(request.get())) {
             if (!sampleKeyIDs.containsIf([&](auto& sampleKeyID) { return sampleKeyID.get() == keyID.get(); }))
                 continue;
 

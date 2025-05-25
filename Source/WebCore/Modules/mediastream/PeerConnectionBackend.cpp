@@ -34,6 +34,7 @@
 
 #if ENABLE(WEB_RTC)
 
+#include "Document.h"
 #include "EventNames.h"
 #include "JSDOMPromiseDeferred.h"
 #include "JSRTCCertificate.h"
@@ -133,7 +134,7 @@ public:
         if (!m_clients.contains(identifier))
             return;
 
-        m_clients.remove(identifier);
+        m_clients.removeFirst(identifier);
         if (m_clients.isEmpty())
             m_logFile = nullptr;
     }

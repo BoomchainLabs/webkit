@@ -2475,13 +2475,7 @@ sub GetEnumerationValueName
     return "EmptyString" if $name eq "";
     return "WebRTC" if $name eq "webrtc";
 
-    my @parts = split("-", $name);
-    @parts = map {
-        my $part = $_;
-        my @dotParts = split(/\./, $part);
-        join("", map { $codeGenerator->WK_ucfirst($_) } @dotParts)
-    } @parts;
-    $name = join("", @parts);
+    $name = join("", map { $codeGenerator->WK_ucfirst($_) } split("-", $name));
     $name = "_$name" if $name =~ /^\d/;
     return $name;
 }
@@ -4290,7 +4284,8 @@ sub GenerateRuntimeEnableConditionalString
 
         my @flags = split(/&/, $context->extendedAttributes->{EnabledBySetting});
         my $exposedToWindowOnly = $interface->extendedAttributes->{Exposed} && $interface->extendedAttributes->{Exposed} eq "Window";
-        AddToImplIncludes($exposedToWindowOnly ? "Document.h" : "ScriptExecutionContext.h");
+        AddToImplIncludes($exposedToWindowOnly ? "DocumentInlines.h" : "ScriptExecutionContext.h");
+        AddToImplIncludes("Settings.h");
         foreach my $flag (@flags) {
             my @orflags = split(/\|/, $flag);
             my @orconjuncts;
@@ -5275,6 +5270,7 @@ sub GenerateImplementation
 
     if (NeedsImplementationClass($interface) && !$interface->extendedAttributes->{CustomHeapSnapshot}) {
         AddToImplIncludes("<JavaScriptCore/HeapAnalyzer.h>");
+        AddToImplIncludes("ContextDestructionObserverInlines.h");
         AddToImplIncludes("ScriptExecutionContext.h");
         AddToImplIncludes("<wtf/URL.h>");
         AddToImplIncludes("<wtf/text/MakeString.h>");

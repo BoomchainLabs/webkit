@@ -37,6 +37,7 @@
 #include "VisibleUnits.h"
 #include <limits.h>
 #include <wtf/Compiler.h>
+#include <wtf/Deque.h>
 #include <wtf/HashMap.h>
 #include <wtf/HashSet.h>
 #include <wtf/ListHashSet.h>
@@ -165,6 +166,7 @@ protected:
     macro(AutocorrectionOccured) \
     macro(AutofillTypeChanged) \
     macro(ARIAColumnIndexChanged) \
+    macro(ARIARoleDescriptionChanged) \
     macro(ARIARowIndexChanged) \
     macro(BrailleLabelChanged) \
     macro(BrailleRoleDescriptionChanged) \
@@ -193,6 +195,7 @@ protected:
     macro(HasPopupChanged) \
     macro(IdAttributeChanged) \
     macro(ImageOverlayChanged) \
+    macro(InputTypeChanged) \
     macro(IsAtomicChanged) \
     macro(KeyShortcutsChanged) \
     macro(LabelChanged) \
@@ -207,7 +210,6 @@ protected:
     macro(PopoverTargetChanged) \
     macro(PositionInSetChanged) \
     macro(RoleChanged) \
-    macro(RoleDescriptionChanged) \
     macro(RowIndexChanged) \
     macro(RowSpanChanged) \
     macro(CellScopeChanged) \
@@ -396,6 +398,12 @@ public:
     void onSlottedContentChange(const HTMLSlotElement&);
     void onStyleChange(Element&, OptionSet<Style::Change>, const RenderStyle* oldStyle, const RenderStyle* newStyle);
     void onStyleChange(RenderText&, StyleDifference, const RenderStyle* oldStyle, const RenderStyle& newStyle);
+#if ENABLE(ACCESSIBILITY_ISOLATED_TREE)
+    // Returns true if the font changes, requiring all descendants to update the Font property.
+    bool onFontChange(Element&, const RenderStyle*, const RenderStyle*);
+    // Returns true if the text color changes, requiring all descendants to update the TextColor property.
+    bool onTextColorChange(Element&, const RenderStyle*, const RenderStyle*);
+#endif
     void onTextSecurityChanged(HTMLInputElement&);
     void onTitleChange(Document&);
     void onValidityChange(Element&);
@@ -657,9 +665,8 @@ public:
     WEBCORE_EXPORT static void initializeAXThreadIfNeeded();
 private:
     static bool clientSupportsIsolatedTree();
-    AXCoreObject* isolatedTreeRootObject();
     // Propagates the root of the isolated tree back into the Core and WebKit.
-    void setIsolatedTreeRoot(AXCoreObject*);
+    void setIsolatedTree(Ref<AXIsolatedTree>);
     void setIsolatedTreeFocusedObject(AccessibilityObject*);
     RefPtr<AXIsolatedTree> getOrCreateIsolatedTree();
     void buildIsolatedTree();
@@ -764,8 +771,9 @@ private:
     void deferRowspanChange(AccessibilityObject*);
     void handleChildrenChanged(AccessibilityObject&);
     void handleAllDeferredChildrenChanged();
+    void handleInputTypeChanged(Element&);
     void handleRoleChanged(Element&, const AtomString&, const AtomString&);
-    void handleRoleDescriptionChanged(Element&);
+    void handleARIARoleDescriptionChanged(Element&);
     void handleMenuOpened(Element&);
     void handleLiveRegionCreated(Element&);
     void handleMenuItemSelected(Element*);
@@ -861,7 +869,7 @@ private:
 
 #if PLATFORM(COCOA)
     Timer m_passwordNotificationTimer;
-    Vector<std::pair<Ref<AccessibilityObject>, AXTextChangeContext>> m_passwordNotifications;
+    Deque<std::pair<Ref<AccessibilityObject>, AXTextChangeContext>> m_passwordNotifications;
 #endif
 
     Timer m_liveRegionChangedPostTimer;
@@ -931,7 +939,7 @@ private:
     UncheckedKeyHashMap<AXID, AXRelations> m_recentlyRemovedRelations;
 
 #if USE(ATSPI)
-    ListHashSet<RefPtr<AXCoreObject>> m_deferredParentChangedList;
+    ListHashSet<RefPtr<AccessibilityObject>> m_deferredParentChangedList;
 #endif
 
 #if PLATFORM(MAC)
@@ -1007,6 +1015,9 @@ bool isRowGroup(Element&);
 bool isRowGroup(Node*);
 ContainerNode* composedParentIgnoringDocumentFragments(Node&);
 ContainerNode* composedParentIgnoringDocumentFragments(Node*);
+
+ElementName elementName(Node*);
+ElementName elementName(Node&);
 
 // Returns true if the element has an attribute that will result in an accname being computed.
 // https://www.w3.org/TR/accname-1.2/

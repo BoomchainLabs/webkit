@@ -3319,7 +3319,7 @@ ALLOW_DEPRECATED_DECLARATIONS_END
 
     for (int index = _pendingPositionInformationHandlers.size() - 1; index >= 0; --index) {
         if (!_pendingPositionInformationHandlers[index])
-            _pendingPositionInformationHandlers.remove(index);
+            _pendingPositionInformationHandlers.removeAt(index);
     }
 }
 
@@ -3684,7 +3684,7 @@ ALLOW_DEPRECATED_DECLARATIONS_END
     if (![self ensurePositionInformationIsUpToDate:request])
         return NO;
 
-    if (gesture == WKBEGestureTypeLoupe && _positionInformation.selectability == WebKit::InteractionInformationAtPosition::Selectability::UnselectableDueToUserSelectNone)
+    if (gesture == WKBEGestureTypeLoupe && _positionInformation.selectability == WebKit::InteractionInformationAtPosition::Selectability::UnselectableDueToUserSelectNoneOrQuirk)
         return NO;
 
     if (_positionInformation.preventTextInteraction)
@@ -7687,7 +7687,7 @@ static UITextAutocapitalizationType toUITextAutocapitalize(WebCore::Autocapitali
         return;
     }
 
-    _keyWebEventHandlers.remove(indexOfHandlerToCall);
+    _keyWebEventHandlers.removeAt(indexOfHandlerToCall);
     handler(event, eventWasHandled);
 }
 
@@ -8830,7 +8830,7 @@ ALLOW_DEPRECATED_DECLARATIONS_END
     _focusedFormControlView = adoptNS([[WKFocusedFormControlView alloc] initWithFrame:self.webView.bounds delegate:self]);
     [_focusedFormControlView hide:NO];
     [_webView addSubview:_focusedFormControlView.get()];
-    [self setInputDelegate:_focusedFormControlView.get()];
+    [self setInputDelegate:static_cast<id<UITextInputDelegate>>(_focusedFormControlView.get())];
 }
 
 - (void)removeFocusedFormControlOverlay
@@ -9660,7 +9660,7 @@ static bool canUseQuickboardControllerFor(UITextContentType type)
 #if HAVE(DIGITAL_CREDENTIALS_UI)
 - (void)_showDigitalCredentialsPicker:(const WebCore::DigitalCredentialsRequestData&)requestData completionHandler:(WTF::CompletionHandler<void(Expected<WebCore::DigitalCredentialsResponseData, WebCore::ExceptionData>&&)>&&)completionHandler
 {
-    _digitalCredentialsPicker = adoptNS([[WKDigitalCredentialsPicker alloc] initWithView:self.webView]);
+    _digitalCredentialsPicker = adoptNS([[WKDigitalCredentialsPicker alloc] initWithView:self.webView page:_page.get()]);
     [_digitalCredentialsPicker presentWithRequestData:requestData completionHandler:WTFMove(completionHandler)];
 }
 
@@ -10648,7 +10648,8 @@ static std::optional<WebCore::DragOperation> coreDragOperationForUIDropOperation
         if (RefPtr modelPresentationManager = _page->modelPresentationManagerProxy())
             modelPresentationManager->doneWithCurrentDragSession();
 
-        // FIXME: https://bugs.webkit.org/show_bug.cgi?id=291293
+        if (_dragDropInteractionState.elementIdentifier())
+            _page->modelDragEnded(_dragDropInteractionState.elementIdentifier().value());
     }
 #endif
 
@@ -11039,7 +11040,7 @@ static Vector<WebCore::IntSize> sizesOfPlaceholderElementsToInsertWhenDroppingIt
     }
 
     _dragDropInteractionState.dragSessionWillRequestAdditionalItem(completion);
-    _page->requestAdditionalItemsForDragSession(WebCore::roundedIntPoint(point), WebCore::roundedIntPoint(point), self._allowedDragSourceActions, [weakSelf = WeakObjCPtr { self }] (bool handled) {
+    _page->requestAdditionalItemsForDragSession(std::nullopt, WebCore::roundedIntPoint(point), WebCore::roundedIntPoint(point), self._allowedDragSourceActions, [weakSelf = WeakObjCPtr { self }] (bool handled) {
         [weakSelf _didHandleAdditionalDragItemsRequest:handled];
     });
 }
@@ -11065,7 +11066,7 @@ static Vector<WebCore::IntSize> sizesOfPlaceholderElementsToInsertWhenDroppingIt
 
         auto dragOrigin = [session locationInView:strongSelf.get()];
         strongSelf->_dragDropInteractionState.prepareForDragSession(session.get(), completion.get());
-        strongSelf->_page->requestDragStart(WebCore::roundedIntPoint(dragOrigin), WebCore::roundedIntPoint([strongSelf convertPoint:dragOrigin toView:[strongSelf window]]), [strongSelf _allowedDragSourceActions], [weakSelf = WeakObjCPtr { strongSelf.get() }] (bool started) {
+        strongSelf->_page->requestDragStart(std::nullopt, WebCore::roundedIntPoint(dragOrigin), WebCore::roundedIntPoint([strongSelf convertPoint:dragOrigin toView:[strongSelf window]]), [strongSelf _allowedDragSourceActions], [weakSelf = WeakObjCPtr { strongSelf.get() }] (bool started) {
             [weakSelf _didHandleDragStartRequest:started];
         });
         RELEASE_LOG(DragAndDrop, "Drag session requested: %p at origin: {%.0f, %.0f}", session.get(), dragOrigin.x, dragOrigin.y);
@@ -12440,6 +12441,11 @@ static RetainPtr<NSItemProvider> createItemProvider(const WebKit::WebPageProxy& 
 }
 
 #endif // ENABLE(IMAGE_ANALYSIS)
+
+- (CALayer *)textIndicatorInstallationLayer
+{
+    return [self layer];
+}
 
 - (void)setUpTextIndicator:(Ref<WebCore::TextIndicator>)textIndicator
 {

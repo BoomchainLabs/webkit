@@ -51,6 +51,7 @@
 #include "BitmapImage.h"
 #include "BorderShape.h"
 #include "BoxLayoutShape.h"
+#include "ContainerNodeInlines.h"
 #include "CSSFilter.h"
 #include "CSSPropertyNames.h"
 #include "Chrome.h"
@@ -618,7 +619,7 @@ bool RenderLayer::shouldBeNormalFlowOnly() const
 
 bool RenderLayer::shouldBeCSSStackingContext() const
 {
-    return !renderer().style().hasAutoUsedZIndex() || renderer().shouldApplyLayoutContainment() || renderer().shouldApplyPaintContainment() || renderer().requiresRenderingConsolidationForViewTransition() || renderer().isRenderViewTransitionCapture() || renderer().isViewTransitionRoot() || isRenderViewLayer();
+    return !renderer().style().hasAutoUsedZIndex() || renderer().shouldApplyLayoutContainment() || renderer().shouldApplyPaintContainment() || renderer().requiresRenderingConsolidationForViewTransition() || renderer().isRenderViewTransitionCapture() ||  renderer().isViewTransitionRoot() || renderer().isViewTransitionContainingBlock() || isRenderViewLayer();
 }
 
 bool RenderLayer::computeCanBeBackdropRoot() const
@@ -851,10 +852,10 @@ void RenderLayer::rebuildZOrderLists(std::unique_ptr<Vector<RenderLayer*>>& posZ
     }
 
     if (isRenderViewLayer() && renderer().document().hasViewTransitionPseudoElementTree()) {
-        if (WeakPtr viewTransitionRoot = renderer().view().viewTransitionRoot(); viewTransitionRoot && viewTransitionRoot->hasLayer()) {
+        if (WeakPtr viewTransitionContainingBlock = renderer().view().viewTransitionContainingBlock(); viewTransitionContainingBlock && viewTransitionContainingBlock->hasLayer()) {
             if (!posZOrderList)
                 posZOrderList = makeUnique<Vector<RenderLayer*>>();
-            posZOrderList->append(viewTransitionRoot->layer());
+            posZOrderList->append(viewTransitionContainingBlock->layer());
         }
     }
 }
@@ -896,7 +897,7 @@ void RenderLayer::setWasOmittedFromZOrderTree()
 void RenderLayer::collectLayers(std::unique_ptr<Vector<RenderLayer*>>& positiveZOrderList, std::unique_ptr<Vector<RenderLayer*>>& negativeZOrderList, OptionSet<Compositing>& accumulatedDirtyFlags)
 {
     ASSERT(!descendantDependentFlagsAreDirty());
-    if (establishesTopLayer() || renderer().isViewTransitionRoot())
+    if (establishesTopLayer() || renderer().isViewTransitionContainingBlock())
         return;
 
     bool isStacking = isStackingContext();
@@ -1006,7 +1007,7 @@ bool RenderLayer::canRender3DTransforms() const
     return compositor().canRender3DTransforms();
 }
 
-bool RenderLayer::paintsWithFilters() const
+bool RenderLayer::shouldPaintWithFilters(OptionSet<PaintBehavior> paintBehavior) const
 {
     const auto& filter = renderer().style().filter();
     if (filter.isEmpty())
@@ -1018,15 +1019,18 @@ bool RenderLayer::paintsWithFilters() const
     if (RenderLayerFilters::isIdentity(renderer()))
         return false;
 
-    if (!isComposited())
+    if (paintBehavior & PaintBehavior::FlattenCompositingLayers)
         return true;
 
-    return !m_backing->canCompositeFilters();
+    if (isComposited() && m_backing->canCompositeFilters())
+        return false;
+
+    return true;
 }
 
 bool RenderLayer::requiresFullLayerImageForFilters() const
 {
-    if (!paintsWithFilters())
+    if (!shouldPaintWithFilters())
         return false;
 
     return m_filters && m_filters->hasFilterThatMovesPixels();
@@ -1333,8 +1337,9 @@ void RenderLayer::recursiveUpdateLayerPositions(OptionSet<UpdateLayerPositionsFl
 
     }
 
-    if (!isRenderViewLayer() && renderer().canContainFixedPositionObjects()) {
-        flags.add(SeenFixedContainingBlockLayer);
+    if (!isRenderViewLayer()) {
+        if (renderer().canContainFixedPositionObjects())
+            flags.add(SeenFixedContainingBlockLayer);
 
         if (transform()) {
             flags.add(SeenTransformedLayer);
@@ -1749,7 +1754,7 @@ TransformationMatrix RenderLayer::currentTransform(OptionSet<RenderStyle::Transf
 
     // Query the animatedStyle() to obtain the current transformation, when accelerated transform animations are running.
     auto styleable = Styleable::fromRenderer(renderer());
-    if ((styleable && styleable->isRunningAcceleratedTransformAnimation()) || !options.contains(RenderStyle::TransformOperationOption::TransformOrigin)) {
+    if ((styleable && styleable->isRunningAcceleratedAnimationOfProperty(CSSPropertyTransform)) || !options.contains(RenderStyle::TransformOperationOption::TransformOrigin)) {
         std::unique_ptr<RenderStyle> animatedStyle = renderer().animatedStyle();
 
         TransformationMatrix transform;
@@ -2381,7 +2386,7 @@ bool RenderLayer::shouldRepaintAfterLayout() const
     // SVG container sizes/positions are only ever determined by their children, so they will
     // change as a reaction on a re-position/re-sizing of the children - which already properly
     // trigger repaints.
-    if (is<RenderSVGContainer>(renderer()) && !paintsWithFilters())
+    if (is<RenderSVGContainer>(renderer()) && !shouldPaintWithFilters())
         return false;
 
     if (m_repaintStatus == RepaintStatus::NeedsNormalRepaint || m_repaintStatus == RepaintStatus::NeedsFullRepaint)
@@ -2514,7 +2519,7 @@ void RenderLayer::setFilterBackendNeedsRepaintingInRect(const LayoutRect& rect)
         parentLayerRect = renderer().localToContainerQuad(repaintQuad, &parentLayer->renderer()).enclosingBoundingBox();
     }
 
-    if (parentLayer->paintsWithFilters()) {
+    if (parentLayer->shouldPaintWithFilters()) {
         parentLayer->setFilterBackendNeedsRepaintingInRect(parentLayerRect);
         return;        
     }
@@ -3567,26 +3572,31 @@ void RenderLayer::clearLayerClipPath()
         svgClipper->removeClientFromCache(renderer());
 }
 
-RenderLayerFilters* RenderLayer::filtersForPainting(GraphicsContext& context, OptionSet<PaintLayerFlag> paintFlags) const
+bool RenderLayer::shouldHaveFiltersForPainting(GraphicsContext& context, OptionSet<PaintLayerFlag> paintFlags, OptionSet<PaintBehavior> paintBehavior) const
 {
     if (context.paintingDisabled())
-        return nullptr;
+        return false;
 
     if (paintFlags & PaintLayerFlag::PaintingOverlayScrollbars)
+        return false;
+
+    if (!shouldPaintWithFilters(paintBehavior))
+        return false;
+
+    return true;
+}
+
+RenderLayerFilters* RenderLayer::filtersForPainting(GraphicsContext& context, OptionSet<PaintLayerFlag> paintFlags, OptionSet<PaintBehavior> paintBehavior)
+{
+    if (!shouldHaveFiltersForPainting(context, paintFlags, paintBehavior))
         return nullptr;
 
-    if (!paintsWithFilters())
-        return nullptr;
-
-    if (m_filters)
-        return m_filters.get();
-
-    return nullptr;
+    return &ensureLayerFilters();
 }
 
 GraphicsContext* RenderLayer::setupFilters(GraphicsContext& destinationContext, LayerPaintingInfo& paintingInfo, OptionSet<PaintLayerFlag> paintFlags, const LayoutSize& offsetFromRoot, const ClipRect& backgroundRect)
 {
-    auto* paintingFilters = filtersForPainting(destinationContext, paintFlags);
+    auto* paintingFilters = filtersForPainting(destinationContext, paintFlags, paintingInfo.paintBehavior);
     if (!paintingFilters)
         return nullptr;
 
@@ -3749,7 +3759,7 @@ void RenderLayer::paintLayerContents(GraphicsContext& context, const LayerPainti
 
     // Apply clip-path to context.
     LayoutSize columnAwareOffsetFromRoot = offsetFromRoot;
-    if (renderer().enclosingFragmentedFlow() && (renderer().hasClipPath() || filtersForPainting(context, paintFlags)))
+    if (renderer().enclosingFragmentedFlow() && (renderer().hasClipPath() || shouldHaveFiltersForPainting(context, paintFlags, paintingInfo.paintBehavior)))
         columnAwareOffsetFromRoot = toLayoutSize(convertToLayerCoords(paintingInfo.rootLayer, LayoutPoint(), AdjustForColumns));
 
     GraphicsContextStateSaver stateSaver(context, false);
@@ -3807,7 +3817,7 @@ void RenderLayer::paintLayerContents(GraphicsContext& context, const LayerPainti
     { // Scope for filter-related state changes.
         ClipRect backgroundRect;
 
-        if (filtersForPainting(context, paintFlags)) {
+        if (shouldHaveFiltersForPainting(context, paintFlags, paintBehavior)) {
             // When we called collectFragments() last time, paintDirtyRect was reset to represent the filter bounds.
             // Now we need to compute the backgroundRect uncontaminated by filters, in order to clip the filtered result.
             // Note that we also use paintingInfo here, not localPaintingInfo which filters also contaminated.
@@ -3896,8 +3906,12 @@ void RenderLayer::paintLayerContents(GraphicsContext& context, const LayerPainti
                 paintOverflowControlsForFragments(layerFragments, currentContext, localPaintingInfo);
         }
 
-        if (filterContext)
+        if (filterContext) {
             applyFilters(context, paintingInfo, paintBehavior, backgroundRect);
+            // Painting a snapshot might have temporarily overriden the filter painting strategy,
+            // make sure it gets reset.
+            updateFilterPaintingStrategy();
+        }
     }
     
     if (shouldPaintContent && !(selectionOnly || selectionAndBackgroundsOnly)) {
@@ -4400,7 +4414,7 @@ void RenderLayer::paintOverflowControlsForFragments(const LayerFragments& layerF
         RegionContextStateSaver regionContextStateSaver(localPaintingInfo.regionContext);
 
         clipToRect(context, stateSaver, regionContextStateSaver, localPaintingInfo, { }, fragment.backgroundRect);
-        m_scrollableArea->paintOverflowControls(context, roundedIntPoint(paintOffsetForRenderer(fragment, localPaintingInfo)), snappedIntRect(fragment.backgroundRect.rect()), true);
+        m_scrollableArea->paintOverflowControls(context, localPaintingInfo.paintBehavior, roundedIntPoint(paintOffsetForRenderer(fragment, localPaintingInfo)), snappedIntRect(fragment.backgroundRect.rect()), true);
     }
 }
 
@@ -5574,6 +5588,9 @@ LayoutRect RenderLayer::calculateLayerBounds(const RenderLayer* ancestorLayer, c
     if ((flags & ExcludeHiddenDescendants) && this != ancestorLayer && !hasVisibleContent() && !hasVisibleDescendant())
         return LayoutRect();
 
+    if ((flags & ExcludeViewTransitionCapturedDescendants) && this != ancestorLayer && renderer().capturedInViewTransition() && !renderer().isDocumentElementRenderer())
+        return LayoutRect();
+
     if (isRenderViewLayer()) {
         // The root layer is always just the size of the document.
         return renderer().view().unscaledDocumentRect();
@@ -5637,7 +5654,7 @@ LayoutRect RenderLayer::calculateLayerBounds(const RenderLayer* ancestorLayer, c
     for (auto* childLayer : normalFlowLayers())
         computeLayersUnion(*childLayer);
 
-    if (flags.contains(IncludeFilterOutsets) || (flags.contains(IncludePaintedFilterOutsets) && paintsWithFilters()))
+    if (flags.contains(IncludeFilterOutsets) || (flags.contains(IncludePaintedFilterOutsets) && shouldPaintWithFilters(flags & IncludeCompositedDescendants ? PaintBehavior::FlattenCompositingLayers : OptionSet<PaintBehavior>())))
         unionBounds.expand(toLayoutBoxExtent(filterOutsets()));
 
     if ((flags & IncludeSelfTransform) && paintsWithTransform(PaintBehavior::Normal)) {
@@ -5752,7 +5769,7 @@ bool RenderLayer::backgroundIsKnownToBeOpaqueInRect(const LayoutRect& localRect)
     if (renderer().style().usedVisibility() != Visibility::Visible)
         return false;
 
-    if (paintsWithFilters() && renderer().style().filter().hasFilterThatAffectsOpacity())
+    if (shouldPaintWithFilters() && renderer().style().filter().hasFilterThatAffectsOpacity())
         return false;
 
     // FIXME: Handle simple transforms.
@@ -6269,12 +6286,15 @@ RenderStyle RenderLayer::createReflectionStyle()
     return newStyle;
 }
 
-void RenderLayer::ensureLayerFilters()
+RenderLayerFilters& RenderLayer::ensureLayerFilters()
 {
     if (m_filters)
-        return;
+        return *m_filters;
     
     m_filters = makeUnique<RenderLayerFilters>(*this);
+    m_filters->setPreferredFilterRenderingModes(renderer().page().preferredFilterRenderingModes());
+    m_filters->setFilterScale({ page().deviceScaleFactor(), page().deviceScaleFactor() });
+    return *m_filters;
 }
 
 void RenderLayer::clearLayerFilters()
@@ -6309,10 +6329,9 @@ void RenderLayer::clearLayerScrollableArea()
 
 void RenderLayer::updateFiltersAfterStyleChange(StyleDifference diff, const RenderStyle* oldStyle)
 {
-    if (renderer().style().filter().hasReferenceFilter()) {
-        ensureLayerFilters();
-        m_filters->updateReferenceFilterClients(renderer().style().filter());
-    } else if (!paintsWithFilters())
+    if (renderer().style().filter().hasReferenceFilter())
+        ensureLayerFilters().updateReferenceFilterClients(renderer().style().filter());
+    else if (!shouldPaintWithFilters())
         clearLayerFilters();
     else if (m_filters)
         m_filters->removeReferenceFilterClients();
@@ -6362,7 +6381,7 @@ void RenderLayer::updateFilterPaintingStrategy()
     // RenderLayerFilters is only used to render the filters in software mode,
     // so we always need to run updateFilterPaintingStrategy() after the composited
     // mode might have changed for this layer.
-    if (!paintsWithFilters()) {
+    if (!shouldPaintWithFilters()) {
         // Don't delete the whole filter info here, because we might use it
         // for loading SVG reference filter files.
         if (m_filters)
@@ -6376,8 +6395,6 @@ void RenderLayer::updateFilterPaintingStrategy()
     }
 
     ensureLayerFilters();
-    m_filters->setPreferredFilterRenderingModes(renderer().page().preferredFilterRenderingModes());
-    m_filters->setFilterScale({ page().deviceScaleFactor(), page().deviceScaleFactor() });
 }
 
 IntOutsets RenderLayer::filterOutsets() const

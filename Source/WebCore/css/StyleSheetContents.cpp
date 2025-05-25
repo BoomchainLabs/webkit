@@ -27,7 +27,8 @@
 #include "CachePolicy.h"
 #include "CachedCSSStyleSheet.h"
 #include "CommonAtomStrings.h"
-#include "Document.h"
+#include "DocumentInlines.h"
+#include "FrameInlines.h"
 #include "FrameLoader.h"
 #include "LocalFrame.h"
 #include "MediaList.h"
@@ -350,7 +351,7 @@ bool StyleSheetContents::wrapperDeleteRule(unsigned index)
 
     unsigned childVectorIndex = index;
     if (childVectorIndex < m_layerRulesBeforeImportRules.size()) {
-        m_layerRulesBeforeImportRules.remove(childVectorIndex);
+        m_layerRulesBeforeImportRules.removeAt(childVectorIndex);
         return true;
     }
     childVectorIndex -= m_layerRulesBeforeImportRules.size();
@@ -358,7 +359,7 @@ bool StyleSheetContents::wrapperDeleteRule(unsigned index)
     if (childVectorIndex < m_importRules.size()) {
         m_importRules[childVectorIndex]->cancelLoad();
         m_importRules[childVectorIndex]->clearParentStyleSheet();
-        m_importRules.remove(childVectorIndex);
+        m_importRules.removeAt(childVectorIndex);
         return true;
     }
     childVectorIndex -= m_importRules.size();
@@ -367,12 +368,12 @@ bool StyleSheetContents::wrapperDeleteRule(unsigned index)
         // Deleting @namespace rule when list contains anything other than @import or @namespace rules is not allowed.
         if (!m_childRules.isEmpty())
             return false;
-        m_namespaceRules.remove(childVectorIndex);
+        m_namespaceRules.removeAt(childVectorIndex);
         return true;
     }
     childVectorIndex -= m_namespaceRules.size();
 
-    m_childRules.remove(childVectorIndex);
+    m_childRules.removeAt(childVectorIndex);
     return true;
 }
 
@@ -700,4 +701,4 @@ void StyleSheetContents::shrinkToFit()
     m_childRules.shrinkToFit();
 }
 
-}
+} // namespace WebCore

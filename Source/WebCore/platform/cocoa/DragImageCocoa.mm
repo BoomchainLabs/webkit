@@ -37,6 +37,7 @@
 #import "FontSelector.h"
 #import "GraphicsContextCG.h"
 #import "Image.h"
+#import "ImageAdapter.h"
 #import "LocalDefaultSystemAppearance.h"
 #import "NodeInlines.h"
 #import "Page.h"
@@ -72,9 +73,6 @@ RetainPtr<NSImage> scaleDragImage(RetainPtr<NSImage> image, FloatSize scale)
     NSSize newSize = NSMakeSize((originalSize.width * scale.width()), (originalSize.height * scale.height()));
     newSize.width = roundf(newSize.width);
     newSize.height = roundf(newSize.height);
-ALLOW_DEPRECATED_DECLARATIONS_BEGIN
-    [image setScalesWhenResized:YES];
-ALLOW_DEPRECATED_DECLARATIONS_END
     [image setSize:newSize];
     return image;
 }

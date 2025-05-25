@@ -194,6 +194,7 @@ void RenderTreeBuilder::destroy(RenderObject& renderer, CanCollapseAnonymousBloc
 {
     RELEASE_ASSERT(RenderTreeMutationDisallowedScope::isMutationAllowed());
     ASSERT(renderer.parent());
+    ASSERT(!renderer.beingDestroyed());
 
     auto notifyDescendantRenderersBeforeSubtreeTearDownIfApplicable = [&] {
         if (renderer.renderTreeBeingDestroyed())
@@ -230,11 +231,23 @@ void RenderTreeBuilder::destroy(RenderObject& renderer, CanCollapseAnonymousBloc
     };
     // FIXME: webkit.org/b/182909.
     tearDownSubTreeIfApplicable();
+
+    auto delayDestroyRendererIfApplicable = [&] {
+        CheckedRef rendererToDelete = *toDestroy;
+        if (rendererToDelete->view().layoutContext().addToDetachedRendererList(WTFMove(toDestroy))) {
+            rendererToDelete->willBeDestroyed();
+            rendererToDelete->setIsBeingDestroyed();
+            rendererToDelete->weakPtrFactory().revokeAll();
+        }
+    };
+    delayDestroyRendererIfApplicable();
 }
 
 void RenderTreeBuilder::attach(RenderElement& parent, RenderPtr<RenderObject> child, RenderObject* beforeChild)
 {
     reportVisuallyNonEmptyContent(parent, *child);
+    ASSERT(!parent.beingDestroyed());
+    ASSERT(child);
     attachInternal(parent, WTFMove(child), beforeChild);
 }
 
@@ -263,7 +276,7 @@ void RenderTreeBuilder::attachInternal(RenderElement& parent, RenderPtr<RenderOb
         if (auto* enclosingFragmentedFlow = parent.enclosingFragmentedFlow()) {
             auto columnSpannerPlaceholderForBeforeChild = [&]() -> RenderMultiColumnSpannerPlaceholder* {
                 auto* multiColumnFlow = dynamicDowncast<RenderMultiColumnFlow>(enclosingFragmentedFlow);
-                return multiColumnFlow ? multiColumnFlow->findColumnSpannerPlaceholder(beforeChildBox) : nullptr;
+                return multiColumnFlow ? multiColumnFlow->findColumnSpannerPlaceholder(*beforeChildBox) : nullptr;
             };
 
             if (auto* spannerPlaceholder = columnSpannerPlaceholderForBeforeChild())
@@ -393,6 +406,9 @@ void RenderTreeBuilder::attachIgnoringContinuation(RenderElement& parent, Render
 
 RenderPtr<RenderObject> RenderTreeBuilder::detach(RenderElement& parent, RenderObject& child, WillBeDestroyed willBeDestroyed, CanCollapseAnonymousBlock canCollapseAnonymousBlock)
 {
+    ASSERT(!parent.beingDestroyed());
+    ASSERT(!child.beingDestroyed());
+
     if (auto* text = dynamicDowncast<RenderSVGText>(parent))
         return svgBuilder().detach(*text, child, willBeDestroyed);
 
@@ -517,7 +533,7 @@ void RenderTreeBuilder::attachToRenderElementInternal(RenderElement& parent, Ren
     if (AXObjectCache* cache = parent.document().axObjectCache())
         cache->childrenChanged(parent, newChild);
 
-    if (parent.hasOutlineAutoAncestor() || parent.outlineStyleForRepaint().outlineStyleIsAuto() == OutlineIsAuto::On)
+    if (parent.hasOutlineAutoAncestor() || parent.outlineStyleForRepaint().hasAutoOutlineStyle())
         if (!is<RenderMultiColumnSet>(newChild->previousSibling())) 
             newChild->setHasOutlineAutoAncestor();
 }
@@ -531,7 +547,7 @@ void RenderTreeBuilder::move(RenderBoxModelObject& from, RenderBoxModelObject& t
     ASSERT(&from == child.parent());
     ASSERT(!beforeChild || &to == beforeChild->parent());
     if (normalizeAfterInsertion == NormalizeAfterInsertion::Yes && is<RenderBlock>(from) && child.isRenderBox())
-        RenderBlock::removePercentHeightDescendantIfNeeded(downcast<RenderBox>(child));
+        RenderBlock::removePercentHeightDescendant(downcast<RenderBox>(child));
     if (normalizeAfterInsertion == NormalizeAfterInsertion::Yes && (to.isRenderBlock() || to.isRenderInline())) {
         // Takes care of adding the new child correctly if toBlock and fromBlock
         // have different kind of children (block vs inline).
@@ -588,7 +604,7 @@ void RenderTreeBuilder::moveChildren(RenderBoxModelObject& from, RenderBoxModelO
     if (normalizeAfterInsertion == NormalizeAfterInsertion::Yes) {
         if (CheckedPtr blockFlow = dynamicDowncast<RenderBlock>(from)) {
             blockFlow->removePositionedObjects(nullptr);
-            RenderBlock::removePercentHeightDescendantIfNeeded(*blockFlow);
+            RenderBlock::removePercentHeightDescendant(*blockFlow);
             removeFloatingObjects(*blockFlow);
         }
     }

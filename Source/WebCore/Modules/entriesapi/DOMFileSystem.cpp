@@ -26,6 +26,8 @@
 #include "config.h"
 #include "DOMFileSystem.h"
 
+#include "ContextDestructionObserverInlines.h"
+#include "ExceptionOr.h"
 #include "File.h"
 #include "FileSystemDirectoryEntry.h"
 #include "FileSystemFileEntry.h"

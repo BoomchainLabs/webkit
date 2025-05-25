@@ -57,6 +57,7 @@ class MachSendRight;
 
 namespace WebCore {
 struct GenericCueData;
+struct MessageForTesting;
 class ISOWebVTTCue;
 class SerializedPlatformDataCueValue;
 class VideoLayerManager;
@@ -114,6 +115,7 @@ public:
     void setReadyState(WebCore::MediaPlayer::ReadyState);
 
     void commitAllTransactions(CompletionHandler<void()>&&);
+    void reportGPUMemoryFootprint(uint64_t);
     void networkStateChanged(RemoteMediaPlayerState&&);
     void readyStateChanged(RemoteMediaPlayerState&&, WebCore::MediaPlayer::ReadyState);
     void volumeChanged(double);
@@ -498,6 +500,9 @@ private:
     void sceneIdentifierDidChange() final;
 #endif
 
+    void setMessageClientForTesting(WeakPtr<WebCore::MessageClientForTesting>) final;
+    void sendInternalMessage(const WebCore::MessageForTesting&);
+
     ThreadSafeWeakPtr<WebCore::MediaPlayer> m_player;
 #if PLATFORM(COCOA)
     mutable UniqueRef<WebCore::VideoLayerManager> m_videoLayerManager;
@@ -553,6 +558,7 @@ private:
     bool m_isGatheringVideoFrameMetadata { false };
     String m_defaultSpatialTrackingLabel;
     String m_spatialTrackingLabel;
+    WeakPtr<WebCore::MessageClientForTesting> m_internalMessageClient;
 };
 
 } // namespace WebKit

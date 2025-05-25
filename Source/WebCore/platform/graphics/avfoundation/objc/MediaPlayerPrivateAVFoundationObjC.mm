@@ -53,6 +53,8 @@
 #import "MediaPlaybackTargetMock.h"
 #import "MediaSelectionGroupAVFObjC.h"
 #import "MediaSessionManagerCocoa.h"
+#import "MessageClientForTesting.h"
+#import "MessageForTesting.h"
 #import "OutOfBandTextTrackPrivateAVF.h"
 #import "PixelBufferConformerCV.h"
 #import "PlatformDynamicRangeLimitCocoa.h"
@@ -897,7 +899,7 @@ void MediaPlayerPrivateAVFoundationObjC::createAVAssetForURL(const URL& url, Ret
     if (!identifier.isEmpty())
         [options setObject:identifier.createNSString().get() forKey:AVURLAssetClientBundleIdentifierKey];
 #endif
-    if (player->prefersSandboxedParsing() && PAL::canLoad_AVFoundation_AVAssetPrefersSandboxedParsingOptionKey())
+    if (PAL::canLoad_AVFoundation_AVAssetPrefersSandboxedParsingOptionKey())
         [options setObject:@YES forKey:AVAssetPrefersSandboxedParsingOptionKey];
 
     if (player->inPrivateBrowsingMode() && PAL::canLoad_AVFoundation_AVURLAssetDoNotLogURLsKey())
@@ -3150,7 +3152,7 @@ void MediaPlayerPrivateAVFoundationObjC::processMediaSelectionOptions()
             }
 
             if ([currentOption isEqual:option]) {
-                removedTextTracks.remove(i - 1);
+                removedTextTracks.removeAt(i - 1);
                 newTrack = false;
                 break;
             }
@@ -4092,6 +4094,10 @@ void MediaPlayerPrivateAVFoundationObjC::updateSpatialTrackingLabel()
         });
         ALWAYS_LOG(LOGIDENTIFIER, "Setting spatialAudioExperience: ", spatialAudioExperienceDescription(experience.get()));
         [m_avPlayer setIntendedSpatialAudioExperience:experience.get()];
+
+        if (RefPtr client = player->messageClientForTesting())
+            client->sendInternalMessage({ "media-player-spatial-experience-change"_s, spatialAudioExperienceDescription(experience.get()) });
+
         return;
     }
 #endif

@@ -1268,13 +1268,6 @@ void Element::scrollTo(const ScrollToOptions& options, ScrollClamping clamping, 
     LOG_WITH_STREAM(Scrolling, stream << "Element " << *this << " scrollTo " << options.left << ", " << options.top << " behavior " << options.behavior);
 
     Ref document = this->document();
-    if (!document->settings().CSSOMViewScrollingAPIEnabled()) {
-        // If the element is the root element and document is in quirks mode, terminate these steps.
-        // Note that WebKit always uses quirks mode document scrolling behavior. See Document::scrollingElement().
-        if (this == document->documentElement())
-            return;
-    }
-    
     if (RefPtr view = document->view())
         view->cancelScheduledScrolls();
 
@@ -3849,7 +3842,7 @@ void Element::removeAttributeInternal(unsigned index, InSynchronizationOfLazyAtt
         detachAttrNodeFromElementWithValue(attrNode.get(), elementData.attributeAt(index).value());
 
     if (inSynchronizationOfLazyAttribute == InSynchronizationOfLazyAttribute::Yes) {
-        elementData.removeAttribute(index);
+        elementData.removeAttributeAt(index);
         return;
     }
 
@@ -3857,7 +3850,7 @@ void Element::removeAttributeInternal(unsigned index, InSynchronizationOfLazyAtt
     willModifyAttribute(name, valueBeingRemoved, nullAtom());
     {
         Style::AttributeChangeInvalidation styleInvalidation(*this, name, valueBeingRemoved, nullAtom());
-        elementData.removeAttribute(index);
+        elementData.removeAttributeAt(index);
     }
 
     didRemoveAttribute(name, valueBeingRemoved);
@@ -5994,7 +5987,7 @@ Vector<RefPtr<WebAnimation>> Element::getAnimations(std::optional<GetAnimationsO
     // For the list of animations to be current, we need to account for any pending CSS changes,
     // such as updates to CSS Animations and CSS Transitions. This requires updating layout as
     // well since resolving layout-dependent media queries could yield animations.
-    // FIXME: We might be able to use ComputedStyleExtractor which is more optimized.
+    // FIXME: We might be able to use Style::Extractor which is more optimized.
     if (RefPtr owner = document->ownerElement())
         owner->protectedDocument()->updateLayout();
     document->updateStyleIfNeeded();

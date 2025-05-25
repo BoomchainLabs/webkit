@@ -268,7 +268,7 @@ bool AccessibilitySVGObject::inheritsPresentationalRole() const
         return false;
 
     for (AccessibilityObject* parent = parentObject(); parent; parent = parent->parentObject()) {
-        if (is<AccessibilityRenderObject>(*parent) && parent->hasTagName(SVGNames::textTag))
+        if (is<AccessibilityRenderObject>(*parent) && parent->hasElementName(ElementName::SVG_text))
             return parent->roleValue() == AccessibilityRole::Presentational;
     }
 
@@ -316,7 +316,7 @@ AccessibilityRole AccessibilitySVGObject::determineAccessibilityRole()
     if (m_renderer->isRenderSVGTSpan())
         return AccessibilityRole::SVGTSpan;
     if (is<SVGAElement>(element))
-        return AccessibilityRole::WebCoreLink;
+        return AccessibilityRole::Link;
 
     return AccessibilityRenderObject::determineAccessibilityRole();
 }

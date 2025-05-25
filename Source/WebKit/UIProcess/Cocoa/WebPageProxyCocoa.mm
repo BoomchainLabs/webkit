@@ -27,6 +27,7 @@
 #import "WebPageProxy.h"
 
 #import "APIAttachment.h"
+#import "APINavigation.h"
 #import "APIPageConfiguration.h"
 #import "APIUIClient.h"
 #import "AppleMediaServicesUISPI.h"
@@ -71,6 +72,7 @@
 #import <WebCore/DragItem.h>
 #import <WebCore/GeometryUtilities.h>
 #import <WebCore/HighlightVisibility.h>
+#import <WebCore/LegacyWebArchive.h>
 #import <WebCore/LocalCurrentGraphicsContext.h>
 #import <WebCore/NetworkExtensionContentFilter.h>
 #import <WebCore/NotImplemented.h>
@@ -87,6 +89,7 @@
 #import <WebCore/TextAnimationTypes.h>
 #import <WebCore/ValidationBubble.h>
 #import <WebCore/VideoPresentationInterfaceIOS.h>
+#import <WebCore/WebTextIndicatorLayer.h>
 #import <pal/spi/cocoa/LaunchServicesSPI.h>
 #import <pal/spi/cocoa/QuartzCoreSPI.h>
 #import <pal/spi/ios/BrowserEngineKitSPI.h>
@@ -94,6 +97,7 @@
 #import <wtf/BlockPtr.h>
 #import <wtf/SoftLinking.h>
 #import <wtf/cf/TypeCastsCF.h>
+#import <wtf/cf/VectorCF.h>
 #import <wtf/cocoa/SpanCocoa.h>
 
 #if ENABLE(MEDIA_USAGE)
@@ -228,32 +232,38 @@ std::optional<IPC::AsyncReplyID> WebPageProxy::grantAccessToCurrentPasteboardDat
     return WebPasteboardProxy::singleton().grantAccessToCurrentData(m_legacyMainFrameProcess, pasteboardName, WTFMove(completionHandler));
 }
 
-void WebPageProxy::beginSafeBrowsingCheck(const URL& url, bool forMainFrameNavigation, WebFramePolicyListenerProxy& listener)
+void WebPageProxy::beginSafeBrowsingCheck(const URL& url, RefPtr<API::Navigation> navigation, WebFrameProxy& frame)
 {
 #if HAVE(SAFE_BROWSING)
-    if (!url.isValid())
-        return listener.didReceiveSafeBrowsingResults({ });
-    RetainPtr context = [SSBLookupContext sharedLookupContext];
-    if (!context)
-        return listener.didReceiveSafeBrowsingResults({ });
-    [context lookUpURL:url.createNSURL().get() completionHandler:makeBlockPtr([listener = Ref { listener }, forMainFrameNavigation, url = url] (SSBLookupResult *result, NSError *error) mutable {
-        RunLoop::protectedMain()->dispatch([listener = WTFMove(listener), result = retainPtr(result), error = retainPtr(error), forMainFrameNavigation, url = WTFMove(url)] {
-            if (error) {
-                listener->didReceiveSafeBrowsingResults({ });
+    SSBLookupContext *context = [SSBLookupContext sharedLookupContext];
+    if (!url.isValid() || !context)
+        return;
+    size_t redirectChainIndex = navigation->redirectChainIndex(url);
+
+    if (navigation)
+        navigation->setSafeBrowsingCheckOngoing(redirectChainIndex, true);
+
+    auto completionHandler = makeBlockPtr([navigation = WTFMove(navigation), forMainFrameNavigation = frame.isMainFrame(), url, weakThis = WeakPtr { *this }, frame = Ref { frame }, redirectChainIndex] (SSBLookupResult *result, NSError *error) mutable {
+        RunLoop::protectedMain()->dispatch([frame = WTFMove(frame), navigation = WTFMove(navigation), result = retainPtr(result), error = retainPtr(error), forMainFrameNavigation, url = WTFMove(url), weakThis, redirectChainIndex] {
+            if (!navigation)
                 return;
-            }
+            navigation->setSafeBrowsingCheckOngoing(redirectChainIndex, false);
+            if (error)
+                return;
 
             for (SSBServiceLookupResult *lookupResult in [result serviceLookupResults]) {
                 if (lookupResult.isPhishing || lookupResult.isMalware || lookupResult.isUnwantedSoftware) {
-                    listener->didReceiveSafeBrowsingResults(BrowsingWarning::create(url, forMainFrameNavigation, BrowsingWarning::SafeBrowsingWarningData { lookupResult }));
+                    navigation->setSafeBrowsingWarning(BrowsingWarning::create(url, forMainFrameNavigation, BrowsingWarning::SafeBrowsingWarningData { lookupResult }));
                     return;
                 }
             }
-            listener->didReceiveSafeBrowsingResults({ });
         });
-    }).get()];
-#else
-    listener.didReceiveSafeBrowsingResults({ });
+    });
+
+    if ([context respondsToSelector:@selector(lookUpURL:isMainFrame:hasHighConfidenceOfSafety:completionHandler:)])
+        [context lookUpURL:url.createNSURL().get() isMainFrame:frame.isMainFrame() hasHighConfidenceOfSafety:NO completionHandler:completionHandler.get()];
+    else
+        [context lookUpURL:url.createNSURL().get() completionHandler:completionHandler.get()];
 #endif
 }
 
@@ -817,7 +827,16 @@ void WebPageProxy::createTextFragmentDirectiveFromSelection(CompletionHandler<vo
         return;
 
     protectedLegacyMainFrameProcess()->sendWithAsyncReply(Messages::WebPage::CreateTextFragmentDirectiveFromSelection(), WTFMove(completionHandler), webPageIDInMainFrameProcess());
+}
 
+void WebPageProxy::getTextFragmentRanges(CompletionHandler<void(const Vector<EditingRange>&&)>&& completionHandler)
+{
+    if (!hasRunningProcess()) {
+        completionHandler({ });
+        return;
+    }
+
+    protectedLegacyMainFrameProcess()->sendWithAsyncReply(Messages::WebPage::GetTextFragmentRanges(), WTFMove(completionHandler), webPageIDInMainFrameProcess());
 }
 
 #if ENABLE(APP_HIGHLIGHTS)
@@ -1485,6 +1504,116 @@ void WebPageProxy::createTextIndicatorForElementWithID(const String& elementID, 
     protectedLegacyMainFrameProcess()->sendWithAsyncReply(Messages::WebPage::CreateTextIndicatorForElementWithID(elementID), WTFMove(completionHandler), webPageIDInMainFrameProcess());
 }
 
+void WebPageProxy::setTextIndicatorFromFrame(FrameIdentifier frameID, const WebCore::TextIndicatorData& indicatorData, WebCore::TextIndicatorLifetime lifetime)
+{
+    RefPtr frame = WebFrameProxy::webFrame(frameID);
+    if (!frame)
+        return;
+
+    auto rect = indicatorData.textBoundingRectInRootViewCoordinates;
+    convertRectToMainFrameCoordinates(rect, frame->rootFrame().frameID(), [weakThis = WeakPtr { *this }, indicatorData = WTFMove(indicatorData), lifetime] (std::optional<FloatRect> convertedRect) mutable {
+        RefPtr protectedThis = weakThis.get();
+        if (!protectedThis || !convertedRect)
+            return;
+        indicatorData.textBoundingRectInRootViewCoordinates = *convertedRect;
+        protectedThis->setTextIndicator(WTFMove(indicatorData), lifetime);
+    });
+}
+
+void WebPageProxy::setTextIndicator(const WebCore::TextIndicatorData& indicatorData, WebCore::TextIndicatorLifetime lifetime)
+{
+    RefPtr pageClient = this->pageClient();
+    if (!pageClient)
+        return;
+
+    RetainPtr<CALayer> installationLayer = pageClient->textIndicatorInstallationLayer();
+
+    teardownTextIndicatorLayer();
+    m_textIndicatorFadeTimer.stop();
+
+    m_textIndicator = TextIndicator::create(indicatorData);
+
+    CGRect frame = m_textIndicator->textBoundingRectInRootViewCoordinates();
+    m_textIndicatorLayer = adoptNS([[WebTextIndicatorLayer alloc] initWithFrame:frame
+        textIndicator:m_textIndicator margin:CGSizeZero offset:CGPointZero]);
+
+    [installationLayer addSublayer:m_textIndicatorLayer.get()];
+
+    if (m_textIndicator->presentationTransition() != WebCore::TextIndicatorPresentationTransition::None)
+        [m_textIndicatorLayer present];
+
+    if ((TextIndicatorLifetime)lifetime == TextIndicatorLifetime::Temporary)
+        m_textIndicatorFadeTimer.startOneShot(WebCore::timeBeforeFadeStarts);
+}
+
+void WebPageProxy::updateTextIndicatorFromFrame(FrameIdentifier frameID, const WebCore::TextIndicatorData& indicatorData)
+{
+    RefPtr frame = WebFrameProxy::webFrame(frameID);
+    if (!frame)
+        return;
+
+    auto rect = indicatorData.textBoundingRectInRootViewCoordinates;
+    convertRectToMainFrameCoordinates(rect, frame->rootFrame().frameID(), [weakThis = WeakPtr { *this }, indicatorData = WTFMove(indicatorData)] (std::optional<FloatRect> convertedRect) mutable {
+        RefPtr protectedThis = weakThis.get();
+        if (!protectedThis || !convertedRect)
+            return;
+        indicatorData.textBoundingRectInRootViewCoordinates = *convertedRect;
+        protectedThis->updateTextIndicator(WTFMove(indicatorData));
+    });
+}
+
+void WebPageProxy::updateTextIndicator(const WebCore::TextIndicatorData& indicatorData)
+{
+    if (m_textIndicator && m_textIndicatorLayer)
+        setTextIndicator(indicatorData, TextIndicatorLifetime::Temporary);
+}
+
+void WebPageProxy::clearTextIndicator()
+{
+    clearTextIndicatorWithAnimation(WebCore::TextIndicatorDismissalAnimation::FadeOut);
+}
+
+void WebPageProxy::clearTextIndicatorWithAnimation(WebCore::TextIndicatorDismissalAnimation animation)
+{
+    if ([m_textIndicatorLayer isFadingOut])
+        return;
+
+    RefPtr textIndicator = m_textIndicator;
+
+    if (textIndicator && textIndicator->wantsManualAnimation() && [m_textIndicatorLayer hasCompletedAnimation] && animation == WebCore::TextIndicatorDismissalAnimation::FadeOut) {
+        startTextIndicatorFadeOut();
+        return;
+    }
+
+    teardownTextIndicatorLayer();
+}
+
+void WebPageProxy::setTextIndicatorAnimationProgress(float animationProgress)
+{
+    if (!m_textIndicator)
+        return;
+
+    [m_textIndicatorLayer setAnimationProgress:animationProgress];
+}
+
+void WebPageProxy::teardownTextIndicatorLayer()
+{
+    [m_textIndicatorLayer removeFromSuperlayer];
+    m_textIndicatorLayer = nil;
+}
+
+void WebPageProxy::startTextIndicatorFadeOut()
+{
+    [m_textIndicatorLayer setFadingOut:YES];
+
+    [m_textIndicatorLayer hideWithCompletionHandler:[weakThis = WeakPtr { *this }] {
+        RefPtr protectedThis = weakThis.get();
+        if (!protectedThis)
+            return;
+        protectedThis->teardownTextIndicatorLayer();
+    }];
+}
+
 #if ENABLE(VIDEO_PRESENTATION_MODE)
 
 void WebPageProxy::playPredominantOrNowPlayingMediaSession(CompletionHandler<void(bool)>&& completion)
@@ -1543,6 +1672,74 @@ void WebPageProxy::decodeImageData(Ref<WebCore::SharedBuffer>&& buffer, std::opt
     ensureProtectedRunningProcess()->sendWithAsyncReply(Messages::WebPage::DecodeImageData(WTFMove(buffer), preferredSize), [preventProcessShutdownScope = protectedLegacyMainFrameProcess()->shutdownPreventingScope(), completionHandler = WTFMove(completionHandler)] (auto result) mutable {
         completionHandler(WTFMove(result));
     }, webPageIDInMainFrameProcess());
+}
+
+void WebPageProxy::getWebArchiveData(CompletionHandler<void(API::Data*)>&& completionHandler)
+{
+    RefPtr mainFrame = m_mainFrame;
+    if (!mainFrame)
+        return completionHandler(nullptr);
+
+    class WebArchvieCallbackAggregator final : public ThreadSafeRefCounted<WebArchvieCallbackAggregator, WTF::DestructionThread::MainRunLoop> {
+    public:
+        using Callback = CompletionHandler<void(RefPtr<LegacyWebArchive>&&)>;
+        static Ref<WebArchvieCallbackAggregator> create(WebCore::FrameIdentifier rootFrameIdentifier, Callback&& callback)
+        {
+            return adoptRef(*new WebArchvieCallbackAggregator(rootFrameIdentifier, WTFMove(callback)));
+        }
+
+        RefPtr<WebCore::LegacyWebArchive> completeFrameArchive(FrameIdentifier identifier)
+        {
+            RefPtr archive = m_frameArchives.take(identifier);
+            if (!archive)
+                return archive;
+
+            for (auto subframeIdentifier : archive->subframeIdentifiers()) {
+                if (auto subframeArchive = completeFrameArchive(subframeIdentifier))
+                    archive->appendSubframeArchive(subframeArchive.releaseNonNull());
+            }
+
+            return archive;
+        }
+
+        ~WebArchvieCallbackAggregator()
+        {
+            if (m_callback)
+                m_callback(completeFrameArchive(m_rootFrameIdentifier));
+        }
+
+        void addResult(HashMap<WebCore::FrameIdentifier, Ref<WebCore::LegacyWebArchive>>&& frameArchives)
+        {
+            for (auto&& [frameIdentifier, archive] : frameArchives)
+                m_frameArchives.set(frameIdentifier, WTFMove(archive));
+        }
+
+    private:
+        WebArchvieCallbackAggregator(WebCore::FrameIdentifier rootFrameIdentifier, Callback&& callback)
+            : m_rootFrameIdentifier(rootFrameIdentifier)
+            , m_callback(WTFMove(callback))
+        {
+        }
+
+        WebCore::FrameIdentifier m_rootFrameIdentifier;
+        Callback m_callback;
+        HashMap<WebCore::FrameIdentifier, Ref<WebCore::LegacyWebArchive>> m_frameArchives;
+    };
+
+    auto callbackAggregator = WebArchvieCallbackAggregator::create(mainFrame->frameID(), [completionHandler = WTFMove(completionHandler)](auto webArchive) mutable {
+        if (!webArchive)
+            return completionHandler(nullptr);
+
+        RetainPtr data = webArchive->rawDataRepresentation();
+        if (!data)
+            return completionHandler(nullptr);
+        completionHandler(API::Data::create(span(data.get())).ptr());
+    });
+    forEachWebContentProcess([&](auto& webProcess, auto pageID) {
+        webProcess.sendWithAsyncReply(Messages::WebPage::GetWebArchives(), [callbackAggregator](auto&& result) {
+            callbackAggregator->addResult(WTFMove(result));
+        }, pageID);
+    });
 }
 
 String WebPageProxy::presentingApplicationBundleIdentifier() const

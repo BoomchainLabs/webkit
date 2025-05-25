@@ -767,6 +767,25 @@ TEST(ContextMenuTests, HitTestResultLinkLocalDataMIMEType)
     Util::run(&gotProposedMenu);
 }
 
+TEST(ContextMenuTests, HitTestResultLinkLocalResourceResponse)
+{
+    _WKContextMenuElementInfo *elementInfo;
+    NSURLResponse* linkLocalResourceResponse;
+
+    auto webView = adoptNS([[TestWKWebView alloc] initWithFrame:NSMakeRect(0, 0, 400, 400)]);
+    [webView synchronouslyLoadHTMLString:@"<a href='sunset-in-cupertino-600px.jpg'><img src='sunset-in-cupertino-600px.jpg'></img></a>"];
+    elementInfo = [webView rightClickAtPointAndWaitForContextMenu:NSMakePoint(200, 200)];
+    linkLocalResourceResponse = elementInfo.hitTestResult.linkLocalResourceResponse;
+    EXPECT_NOT_NULL(linkLocalResourceResponse);
+    EXPECT_WK_STREQ(linkLocalResourceResponse.suggestedFilename, "sunset-in-cupertino-600px.jpg");
+    EXPECT_WK_STREQ(linkLocalResourceResponse.MIMEType, "image/jpeg");
+
+    [webView synchronouslyLoadHTMLString:@"<a href='https://webkit.org/'><img src='sunset-in-cupertino-600px.jpg'></img></a>"];
+    elementInfo = [webView rightClickAtPointAndWaitForContextMenu:NSMakePoint(200, 200)];
+    linkLocalResourceResponse = elementInfo.hitTestResult.linkLocalResourceResponse;
+    EXPECT_NULL(linkLocalResourceResponse);
+}
+
 TEST(ContextMenuTests, HitTestResultLinkSuggestedFilename)
 {
     auto delegate = adoptNS([[TestUIDelegate alloc] init]);
@@ -837,6 +856,55 @@ TEST(ContextMenuTests, HitTestResultLinkWithInvalidURL)
     [webView synchronouslyLoadHTMLString:@"<a href='https://' style='font-size: 100px;'>Link</a>"];
 
     RetainPtr<_WKContextMenuElementInfo> elementInfo = [webView rightClickAtPointAndWaitForContextMenu:NSMakePoint(50, 350)];
+    EXPECT_NOT_NULL([elementInfo hitTestResult]);
+}
+
+TEST(ContextMenuTests, ContextMenuElementInfoAllowsFollowingImageURL)
+{
+    _WKContextMenuElementInfo *elementInfo;
+    CGFloat iconWidth = 215;
+    CGFloat iconHeight = 174;
+    auto webView = adoptNS([[TestWKWebView alloc] initWithFrame:NSMakeRect(0, 0, iconWidth * 2, iconHeight * 2)]);
+
+    [webView synchronouslyLoadHTMLString:@"<img src='icon.png'></img>"];
+    elementInfo = [webView rightClickAtPointAndWaitForContextMenu:NSMakePoint(iconWidth, iconHeight)];
+    EXPECT_TRUE(elementInfo.allowsFollowingImageURL);
+
+    [webView synchronouslyLoadHTMLString:@"<img src='file:///icon.png'></img>"];
+    elementInfo = [webView rightClickAtPointAndWaitForContextMenu:NSMakePoint(iconWidth, iconHeight)];
+    EXPECT_FALSE(elementInfo.allowsFollowingImageURL);
+}
+
+TEST(ContextMenuTests, ContextMenuElementInfoAllowsFollowingLink)
+{
+    _WKContextMenuElementInfo *elementInfo;
+    auto webView = adoptNS([[TestWKWebView alloc] initWithFrame:NSMakeRect(0, 0, 400, 400)]);
+
+    [webView synchronouslyLoadHTMLString:@"<a href='icon.png' style='font-size: 100px;'>Link</a>"];
+    elementInfo = [webView rightClickAtPointAndWaitForContextMenu:NSMakePoint(50, 350)];
+    EXPECT_TRUE(elementInfo.allowsFollowingLink);
+
+    [webView synchronouslyLoadHTMLString:@"<a href='file:///simple.html' style='font-size: 100px;'>Hello world</a>"];
+    elementInfo = [webView rightClickAtPointAndWaitForContextMenu:NSMakePoint(50, 350)];
+    EXPECT_FALSE(elementInfo.allowsFollowingLink);
+}
+
+TEST(ContextMenuTests, ContextMenuTopLevelTextNodeInShadowDOMShouldNotCrash)
+{
+    RetainPtr configuration = adoptNS([[WKWebViewConfiguration alloc] init]);
+    [configuration _setContextMenuQRCodeDetectionEnabled:YES];
+
+    RetainPtr webView = adoptNS([[TestWKWebView alloc] initWithFrame:NSMakeRect(0, 0, 400, 400) configuration:configuration.get()]);
+    [webView synchronouslyLoadHTMLString:@(R"(
+    <body style='margin: 0; padding: 0; font-size:50px'>
+    </body>
+    <script>
+        const shadowRoot = document.body.attachShadow({ mode: "open" });
+        const textNode = document.createTextNode("Text Node in Shadow DOM");
+        shadowRoot.appendChild(textNode);
+    </script>
+    )")];
+    RetainPtr elementInfo = [webView rightClickAtPointAndWaitForContextMenu:NSMakePoint(5, 395)];
     EXPECT_NOT_NULL([elementInfo hitTestResult]);
 }
 

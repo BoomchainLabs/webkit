@@ -664,13 +664,12 @@ static AccessibilityObjectWrapper *ancestorWithRole(const AXCoreObject& descenda
     // Trait information also needs to be gathered from the parents above the object.
     // The parentObject is needed instead of the unignoredParentObject, because a table might be ignored, but information still needs to be gathered from it.
     for (auto* parent = backingObject->parentObject(); parent; parent = parent->parentObject()) {
-        AccessibilityRole parentRole = parent->roleValue();
+        auto parentRole = parent->roleValue();
         if (parentRole == AccessibilityRole::WebArea)
             break;
 
         switch (parentRole) {
         case AccessibilityRole::Link:
-        case AccessibilityRole::WebCoreLink:
             traits |= [self _axLinkTrait];
             if (parent->isVisitedLink())
                 traits |= [self _axVisitedTrait];
@@ -782,7 +781,6 @@ static AccessibilityObjectWrapper *ancestorWithRole(const AXCoreObject& descenda
     uint64_t traits = [self _axWebContentTrait];
     switch (role) {
     case AccessibilityRole::Link:
-    case AccessibilityRole::WebCoreLink:
         traits |= [self _axLinkTrait];
         if (self.axBackingObject->isVisitedLink())
             traits |= [self _axVisitedTrait];
@@ -870,7 +868,7 @@ static AccessibilityObjectWrapper *ancestorWithRole(const AXCoreObject& descenda
 {
     // If an SVG group element has a title, it should be an accessible element on iOS.
     Node* node = self.axBackingObject->node();
-    if (node && node->hasTagName(SVGNames::gTag) && [[self accessibilityLabel] length] > 0)
+    if (WebCore::elementName(node) == ElementName::SVG_g && [[self accessibilityLabel] length] > 0)
         return YES;
     
     return NO;
@@ -936,7 +934,6 @@ static AccessibilityObjectWrapper *ancestorWithRole(const AXCoreObject& descenda
 
     // Links can sometimes be elements (when they only contain static text or don't contain anything).
     // They should not be elements when containing text and other types.
-    case AccessibilityRole::WebCoreLink:
     case AccessibilityRole::Link:
         // Links can sometimes be elements (when they only contain static text or don't contain anything).
         // They should not be elements when containing text and other types.
@@ -1771,7 +1768,7 @@ static void appendStringToResult(NSMutableString *result, NSString *string)
         return NO;
     
     AccessibilityRole role = self.axBackingObject->roleValue();
-    if (role != AccessibilityRole::Link && role != AccessibilityRole::WebCoreLink)
+    if (role != AccessibilityRole::Link)
         return NO;
     
     const auto& children = self.axBackingObject->unignoredChildren();
@@ -2107,11 +2104,11 @@ static RenderObject* rendererForView(WAKView* view)
     // Use this to check if an object is the child of a summary object.
     // And return the summary's parent, which is the expandable details object.
     return Accessibility::findAncestor<AccessibilityObject>(object, true, [&] (const AccessibilityObject& object) {
-        const auto& tag = object.tagName();
-        if (tag == summaryTag)
+        auto elementName = object.elementName();
+        if (elementName == ElementName::HTML_summary)
             foundSummary = true;
 
-        return tag == detailsTag && foundSummary;
+        return elementName == ElementName::HTML_details && foundSummary;
     });
 }
 
@@ -2119,7 +2116,7 @@ static RenderObject* rendererForView(WAKView* view)
 {
     // Use this to check if an object is inside a details object.
     if (AccessibilityObject* details = Accessibility::findAncestor<AccessibilityObject>(*object, true, [] (const AccessibilityObject& object) {
-        return object.hasTagName(detailsTag);
+        return object.hasElementName(ElementName::HTML_details);
     }))
         return details;
     return nil;

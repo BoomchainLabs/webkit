@@ -55,6 +55,7 @@
 #include "Model.h"
 #include "NullGraphicsContext.h"
 #include "Page.h"
+#include "PathOperation.h"
 #include "PerformanceLoggingClient.h"
 #include "PluginViewBase.h"
 #include "ProgressTracker.h"
@@ -79,7 +80,9 @@
 #include "RenderVideo.h"
 #include "RenderView.h"
 #include "RenderViewTransitionCapture.h"
+#include "RotateTransformOperation.h"
 #include "SVGGraphicsElement.h"
+#include "ScaleTransformOperation.h"
 #include "ScrollingCoordinator.h"
 #include "Settings.h"
 #include "StyleResolver.h"
@@ -714,7 +717,7 @@ void RenderLayerBacking::updateTransform(const RenderStyle& style)
         if (RefPtr activeViewTransition = renderer().document().activeViewTransition()) {
             if (CheckedPtr viewTransitionCapture = activeViewTransition->viewTransitionNewPseudoForCapturedElement(renderer())) {
                 t.scaleNonUniform(viewTransitionCapture->scale().width(), viewTransitionCapture->scale().height());
-                t.translate(viewTransitionCapture->captureContentInset().x(), viewTransitionCapture->captureContentInset().y());
+                t.translateRight(viewTransitionCapture->captureContentInset().x(), viewTransitionCapture->captureContentInset().y());
             }
             if (m_owningLayer.isRenderViewLayer()) {
                 auto scrollPosition = renderer().view().frameView().scrollPosition();
@@ -1524,7 +1527,7 @@ void RenderLayerBacking::updateGeometry(const RenderLayer* compositedAncestor)
 
     bool isRunningAcceleratedTransformAnimation = false;
     if (auto styleable = Styleable::fromRenderer(renderer()))
-        isRunningAcceleratedTransformAnimation = styleable->isRunningAcceleratedTransformAnimation();
+        isRunningAcceleratedTransformAnimation = styleable->isRunningAcceleratedAnimationOfProperty(CSSPropertyTransform);
 
     updateTransform(style);
     updateOpacity(style);
@@ -3319,7 +3322,7 @@ bool RenderLayerBacking::containsPaintedContent(PaintedContentsInfo& contentsInf
 // that require painting. Direct compositing saves backing store.
 bool RenderLayerBacking::isDirectlyCompositedImage() const
 {
-    if (m_owningLayer.hasVisibleBoxDecorationsOrBackground() || m_owningLayer.paintsWithFilters() || renderer().hasClip())
+    if (m_owningLayer.hasVisibleBoxDecorationsOrBackground() || m_owningLayer.shouldPaintWithFilters() || renderer().hasClip())
         return false;
 
     // Fixed layers that allow detaching won't have a backing store,
@@ -3580,8 +3583,8 @@ GraphicsLayer* RenderLayerBacking::childForSuperlayers() const
         // If the document element is captured, then the RenderView's layer will get attached
         // into the view-transition tree, and we instead want to attach the root of the VT tree to our ancestor.
         if (m_owningLayer.renderer().protectedDocument()->activeViewTransitionCapturedDocumentElement()) {
-            if (WeakPtr viewTransitionRoot = m_owningLayer.renderer().view().viewTransitionRoot(); viewTransitionRoot && viewTransitionRoot->hasLayer() && viewTransitionRoot->layer()->backing())
-                return viewTransitionRoot->layer()->backing()->childForSuperlayers();
+            if (WeakPtr viewTransitionContainingBlock = m_owningLayer.renderer().view().viewTransitionContainingBlock(); viewTransitionContainingBlock && viewTransitionContainingBlock->hasLayer() && viewTransitionContainingBlock->layer()->backing())
+                return viewTransitionContainingBlock->layer()->backing()->childForSuperlayers();
         }
     }
     return childForSuperlayersExcludingViewTransitions();

@@ -335,7 +335,8 @@ bool AbstractInterpreter<AbstractStateType>::handleConstantBinaryBitwiseOp(Node*
         case ArithBitLShift:
             setConstant(node, JSValue(a << (static_cast<uint32_t>(b) & 0x1f)));
             break;
-        case BitURShift:
+        case ValueBitURShift:
+        case ArithBitURShift:
             setConstant(node, JSValue(static_cast<int32_t>(static_cast<uint32_t>(a) >> (static_cast<uint32_t>(b) & 0x1f))));
             break;
         default:
@@ -601,6 +602,24 @@ bool AbstractInterpreter<AbstractStateType>::executeEffects(unsigned clobberLimi
         break;
     }
 
+    case ValueBitURShift: {
+        // URShift >>> does not accept BigInt
+        if (handleConstantBinaryBitwiseOp(node))
+            break;
+
+        auto& value1 = forNode(node->child1());
+        auto& value2 = forNode(node->child2());
+        if (value1.isType(SpecInt32Only) && value2.isType(SpecInt32Only)) {
+            didFoldClobberWorld();
+            setTypeForNode(node, SpecInt32Only);
+            break;
+        }
+
+        clobberWorld();
+        setTypeForNode(node, SpecInt32Only);
+        break;
+    }
+
     case ValueBitXor:
     case ValueBitAnd:
     case ValueBitOr:
@@ -664,7 +683,7 @@ bool AbstractInterpreter<AbstractStateType>::executeEffects(unsigned clobberLimi
     case ArithBitXor:
     case ArithBitRShift:
     case ArithBitLShift:
-    case BitURShift: {
+    case ArithBitURShift: {
         if (node->child1().useKind() == UntypedUse || node->child2().useKind() == UntypedUse) {
             clobberWorld();
             setNonCellTypeForNode(node, SpecInt32Only);
@@ -2346,8 +2365,8 @@ bool AbstractInterpreter<AbstractStateType>::executeEffects(unsigned clobberLimi
                 || node->isBinaryUseKind(SymbolUse)
                 || node->isBinaryUseKind(StringUse)
                 || node->isBinaryUseKind(StringIdentUse)
-                || node->isBinaryUseKind(ObjectUse)
-                || node->isSymmetricBinaryUseKind(ObjectUse, ObjectOrOtherUse)
+                || (node->op() == CompareEq && node->isBinaryUseKind(ObjectUse))
+                || (node->op() == CompareEq && node->isSymmetricBinaryUseKind(ObjectUse, ObjectOrOtherUse))
                 || value.isType(SpecInt32Only)
                 || value.isType(SpecInt52Any)
                 || value.isType(SpecAnyIntAsDouble)
@@ -2355,7 +2374,7 @@ bool AbstractInterpreter<AbstractStateType>::executeEffects(unsigned clobberLimi
                 || value.isType(SpecString)
                 || value.isType(SpecBoolean)
                 || value.isType(SpecSymbol)
-                || value.isType(SpecObject)
+                || (node->op() == CompareEq && value.isType(SpecObject))
                 || value.isType(SpecOther)) {
                 switch (node->op()) {
                 case CompareLess:
@@ -2954,7 +2973,7 @@ bool AbstractInterpreter<AbstractStateType>::executeEffects(unsigned clobberLimi
                 switch (oneArrayMode) {
                 case asArrayModesIgnoringTypedArrays(ArrayWithContiguous):
                     mayIncludeNonNumber = true;
-                    FALLTHROUGH;
+                    [[fallthrough]];
                 case asArrayModesIgnoringTypedArrays(ArrayWithInt32):
                 case asArrayModesIgnoringTypedArrays(ArrayWithDouble): {
                     if (mode.isInBounds() || mode.isOutOfBoundsSaneChain())
@@ -2985,7 +3004,9 @@ bool AbstractInterpreter<AbstractStateType>::executeEffects(unsigned clobberLimi
         if (node->hasDoubleResult()) {
             // We say SpecFullDouble since it will involve Float16 / Float32 / Float64 TypedArrays.
             setNonCellTypeForNode(node, SpecFullDouble);
-        } else if (node->hasInt52Result())
+        } else if (node->hasInt32Result())
+            setNonCellTypeForNode(node, SpecInt32Only);
+        else if (node->hasInt52Result())
             setNonCellTypeForNode(node, SpecInt52Any);
         else {
             if (mayIncludeNonNumber)
@@ -3533,9 +3554,13 @@ bool AbstractInterpreter<AbstractStateType>::executeEffects(unsigned clobberLimi
 
     case NewRegExpUntyped: {
         ASSERT(node->structure()->classInfoForCells() == RegExpObject::info());
-        if (node->child1().useKind() != StringUse || node->child2().useKind() != StringUse)
-            clobberWorld();
-        setForNode(node, node->structure());
+        if (node->child1().useKind() == StringUse && node->child2().useKind() == StringUse) {
+            setForNode(node, node->structure());
+            break;
+        }
+
+        clobberWorld();
+        makeHeapTopForNode(node);
         break;
     }
 
@@ -3569,13 +3594,14 @@ bool AbstractInterpreter<AbstractStateType>::executeEffects(unsigned clobberLimi
                             break;
                         }
                     }
-                } else {
-                    setForNode(node, m_graph.globalObjectFor(node->origin.semantic)->originalArrayStructureForIndexingType(CopyOnWriteArrayWithContiguous));
-                    break;
                 }
             }
 #endif
-            setForNode(node, m_graph.globalObjectFor(node->origin.semantic)->originalArrayStructureForIndexingType(ArrayWithContiguous));
+            JSGlobalObject* globalObject = m_graph.globalObjectFor(node->origin.semantic);
+            RegisteredStructureSet structureSet;
+            structureSet.add(m_graph.registerStructure(globalObject->originalArrayStructureForIndexingType(ArrayWithContiguous)));
+            structureSet.add(m_graph.registerStructure(globalObject->originalArrayStructureForIndexingType(CopyOnWriteArrayWithContiguous)));
+            setForNode(node, structureSet);
         } else {
             setForNode(node, 
                 m_graph.globalObjectFor(node->origin.semantic)->arrayStructureForIndexingTypeDuringAllocation(ArrayWithContiguous));
@@ -4033,7 +4059,7 @@ bool AbstractInterpreter<AbstractStateType>::executeEffects(unsigned clobberLimi
         setTypeForNode(node, SpecObject);
         break;
     }
-        
+
     case GetScope: {
         JSValue value = forNode(node->child1()).value();
         if (value) {
@@ -4055,6 +4081,11 @@ bool AbstractInterpreter<AbstractStateType>::executeEffects(unsigned clobberLimi
             setTypeForNode(node, SpecObjectOther);
             break;
         }
+        break;
+    }
+
+    case GetEvalScope: {
+        setTypeForNode(node, SpecObjectOther);
         break;
     }
 

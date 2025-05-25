@@ -86,6 +86,12 @@ public:
 
     bool hasLocalDataForLinkURL() const { return m_data.hasLocalDataForLinkURL; }
 
+    bool allowsFollowingLink() const { return m_data.allowsFollowingLink; }
+
+    bool allowsFollowingImageURL() const { return m_data.allowsFollowingImageURL; }
+
+    const std::optional<WebCore::ResourceResponse>& linkLocalResourceResponse() const { return m_data.linkLocalResourceResponse; }
+
 private:
     explicit HitTestResult(const WebKit::WebHitTestResultData& hitTestResultData, WebKit::WebPageProxy* page)
         : m_data(hitTestResultData)

@@ -29,7 +29,6 @@
 #include "StyleGradient.h"
 
 #include "ColorInterpolation.h"
-#include "ComputedStyleExtractor.h"
 #include "FloatConversion.h"
 #include "GeometryUtilities.h"
 #include "Gradient.h"
@@ -471,7 +470,7 @@ template<typename GradientAdapter, typename StyleGradient> GradientColorStops co
         // Check if everything coincides or the midpoint is exactly in the middle.
         // If so, ignore the midpoint.
         if (offset - offset1 == offset2 - offset) {
-            stops.remove(x);
+            stops.removeAt(x);
             continue;
         }
 
@@ -513,7 +512,7 @@ template<typename GradientAdapter, typename StyleGradient> GradientColorStops co
             newStops[y].color = interpolateColors(styleGradient.parameters.colorInterpolationMethod.method, color1, 1.0f - multiplier, color2, multiplier);
         }
 
-        stops.remove(x);
+        stops.removeAt(x);
         stops.insertSpan(x, std::span { newStops });
         x += 9;
     }

@@ -76,6 +76,7 @@
 #include "LocalizedStrings.h"
 #include "MathMLNames.h"
 #include "NodeList.h"
+#include "NodeName.h"
 #include "NodeTraversal.h"
 #include "Page.h"
 #include "PositionInlines.h"
@@ -671,6 +672,11 @@ void AccessibilityObject::insertChild(AccessibilityObject& child, unsigned index
     }
 #endif // USE(ATSPI)
 
+    auto insert = [this] (Ref<AXCoreObject>&& object, unsigned index) {
+        std::ignore = setChildIndexInParent(object.get(), index);
+        m_children.insert(index, WTFMove(object));
+    };
+
     auto thisAncestorFlags = computeAncestorFlags();
     child.initializeAncestorFlags(thisAncestorFlags);
     setIsIgnoredFromParentDataForChild(child);
@@ -687,21 +693,36 @@ void AccessibilityObject::insertChild(AccessibilityObject& child, unsigned index
                 // Calls to `child.isIgnored()` or `child.children()` can cause layout, which in turn can cause this object to clear its m_children. This can cause `insertionIndex` to no longer be valid. Detect this and break early if necessary.
                 if (insertionIndex > m_children.size())
                     break;
-                m_children.insert(insertionIndex, grandchild);
+                insert(WTFMove(grandchild), insertionIndex);
                 ++insertionIndex;
             }
         }
     } else {
         // Table component child-parent relationships often don't line up properly, hence the need for methods
         // like parentTable() and parentRow(). Exclude them from this ASSERT.
+        // FIXME: We hit this ASSERT on gmail.com. https://bugs.webkit.org/show_bug.cgi?id=293264
         ASSERT(isTableComponent(child) || isTableComponent(*this) || child.parentObject() == this);
-        m_children.insert(index, child);
+        insert(Ref { child }, index);
     }
     
     // Reset the child's m_isIgnoredFromParentData since we are done adding that child and its children.
     child.clearIsIgnoredFromParentData();
 }
-    
+
+void AccessibilityObject::resetChildrenIndexInParent() const
+{
+    if (!shouldSetChildIndexInParent())
+        return;
+
+    unsigned index = 0;
+    for (const auto& child : m_children) {
+        bool didSet = setChildIndexInParent(child.get(), index);
+        // We check shouldSetChildIndexInParent above, so this should always be true.
+        ASSERT_UNUSED(didSet, didSet);
+        ++index;
+    }
+}
+
 AXCoreObject::AccessibilityChildrenVector AccessibilityObject::findMatchingObjects(AccessibilitySearchCriteria&& criteria)
 {
     if (auto* cache = axObjectCache())
@@ -1429,6 +1450,12 @@ RenderView* AccessibilityObject::topRenderer() const
     return nullptr;
 }
 
+unsigned AccessibilityObject::ariaLevel() const
+{
+    int level = getIntegralAttribute(aria_levelAttr);
+    return level > 0 ? level : 0;
+}
+
 String AccessibilityObject::language() const
 {
     const auto& lang = getAttribute(langAttr);
@@ -1889,8 +1916,8 @@ std::optional<VisiblePosition> AccessibilityObject::previousLineStartPositionInt
 
 bool AccessibilityObject::hasRowGroupTag() const
 {
-    const auto& tag = tagName();
-    return tag == theadTag || tag == tbodyTag || tag == tfootTag;
+    auto elementName = this->elementName();
+    return elementName == ElementName::HTML_thead || elementName == ElementName::HTML_tbody || elementName == ElementName::HTML_tfoot;
 }
 
 bool AccessibilityObject::isVisited() const
@@ -1920,7 +1947,7 @@ bool AccessibilityObject::dependsOnTextUnderElement() const
     switch (roleValue()) {
     case AccessibilityRole::PopUpButton:
         // Native popup buttons should not use their descendant's text as a title. That value is retrieved through stringValue().
-        if (hasTagName(selectTag))
+        if (hasElementName(ElementName::HTML_select))
             break;
         [[fallthrough]];
     case AccessibilityRole::Summary:
@@ -2110,7 +2137,7 @@ const AccessibilityScrollView* AccessibilityObject::ancestorAccessibilityScrollV
 }
 
 #if PLATFORM(COCOA)
-RemoteAXObjectRef AccessibilityObject::remoteParentObject() const
+RetainPtr<RemoteAXObjectRef> AccessibilityObject::remoteParent() const
 {
     auto* document = this->document();
     auto* frame = document ? document->frame() : nullptr;
@@ -2269,7 +2296,6 @@ String AccessibilityObject::localizedActionVerb() const
     case AccessibilityRole::Switch:
         return isChecked() ? checkedCheckboxAction : uncheckedCheckboxAction;
     case AccessibilityRole::Link:
-    case AccessibilityRole::WebCoreLink:
         return linkAction;
     case AccessibilityRole::PopUpButton:
         return menuListAction;
@@ -2302,7 +2328,6 @@ String AccessibilityObject::actionVerb() const
     case AccessibilityRole::Switch:
         return isChecked() ? "uncheck"_s : "check"_s;
     case AccessibilityRole::Link:
-    case AccessibilityRole::WebCoreLink:
         return "jump"_s;
     case AccessibilityRole::PopUpButton:
     case AccessibilityRole::MenuListPopup:
@@ -2426,10 +2451,9 @@ bool AccessibilityObject::ignoredFromModalPresence() const
     return !isModalDescendant(*modalNode);
 }
 
-bool AccessibilityObject::hasTagName(const QualifiedName& tagName) const
+bool AccessibilityObject::hasElementName(ElementName name) const
 {
-    RefPtr element = dynamicDowncast<Element>(node());
-    return element && element->hasTagName(tagName);
+    return elementName() == name;
 }
 
 bool AccessibilityObject::hasAttribute(const QualifiedName& attribute) const
@@ -2571,10 +2595,10 @@ static void initializeRoleMap()
         RoleEntry { "doc-acknowledgments"_s, AccessibilityRole::LandmarkDocRegion },
         RoleEntry { "doc-afterword"_s, AccessibilityRole::LandmarkDocRegion },
         RoleEntry { "doc-appendix"_s, AccessibilityRole::LandmarkDocRegion },
-        RoleEntry { "doc-backlink"_s, AccessibilityRole::WebCoreLink },
+        RoleEntry { "doc-backlink"_s, AccessibilityRole::Link },
         RoleEntry { "doc-biblioentry"_s, AccessibilityRole::ListItem },
         RoleEntry { "doc-bibliography"_s, AccessibilityRole::LandmarkDocRegion },
-        RoleEntry { "doc-biblioref"_s, AccessibilityRole::WebCoreLink },
+        RoleEntry { "doc-biblioref"_s, AccessibilityRole::Link },
         RoleEntry { "doc-chapter"_s, AccessibilityRole::LandmarkDocRegion },
         RoleEntry { "doc-colophon"_s, AccessibilityRole::TextGroup },
         RoleEntry { "doc-conclusion"_s, AccessibilityRole::LandmarkDocRegion },
@@ -2591,10 +2615,10 @@ static void initializeRoleMap()
         RoleEntry { "doc-footnote"_s, AccessibilityRole::Footnote },
         RoleEntry { "doc-foreword"_s, AccessibilityRole::LandmarkDocRegion },
         RoleEntry { "doc-glossary"_s, AccessibilityRole::LandmarkDocRegion },
-        RoleEntry { "doc-glossref"_s, AccessibilityRole::WebCoreLink },
+        RoleEntry { "doc-glossref"_s, AccessibilityRole::Link },
         RoleEntry { "doc-index"_s, AccessibilityRole::LandmarkNavigation },
         RoleEntry { "doc-introduction"_s, AccessibilityRole::LandmarkDocRegion },
-        RoleEntry { "doc-noteref"_s, AccessibilityRole::WebCoreLink },
+        RoleEntry { "doc-noteref"_s, AccessibilityRole::Link },
         RoleEntry { "doc-notice"_s, AccessibilityRole::DocumentNote },
         RoleEntry { "doc-pagebreak"_s, AccessibilityRole::Splitter },
         RoleEntry { "doc-pagelist"_s, AccessibilityRole::LandmarkNavigation },
@@ -2630,7 +2654,7 @@ static void initializeRoleMap()
         RoleEntry { "image"_s, AccessibilityRole::Image },
         RoleEntry { "img"_s, AccessibilityRole::Image },
         RoleEntry { "insertion"_s, AccessibilityRole::Insertion },
-        RoleEntry { "link"_s, AccessibilityRole::WebCoreLink },
+        RoleEntry { "link"_s, AccessibilityRole::Link },
         RoleEntry { "list"_s, AccessibilityRole::List },
         RoleEntry { "listitem"_s, AccessibilityRole::ListItem },
         RoleEntry { "listbox"_s, AccessibilityRole::ListBox },
@@ -2798,12 +2822,6 @@ SRGBA<uint8_t> AccessibilityObject::colorValue() const
 }
 
 #if !PLATFORM(MAC)
-String AccessibilityObject::rolePlatformDescription()
-{
-    // FIXME: implement in other platforms.
-    return String();
-}
-
 String AccessibilityObject::subrolePlatformString() const
 {
     return String();
@@ -2819,43 +2837,10 @@ String AccessibilityObject::embeddedImageDescription() const
     return renderImage->accessibilityDescription();
 }
 
-// ARIA spec: User agents must not expose the aria-roledescription property if the element to which aria-roledescription is applied does not have a valid WAI-ARIA role or does not have an implicit WAI-ARIA role semantic.
-bool AccessibilityObject::supportsARIARoleDescription() const
-{
-    switch (roleValue()) {
-    case AccessibilityRole::Generic:
-    case AccessibilityRole::Unknown:
-        return false;
-    default:
-        return true;
-    }
-}
-
-String AccessibilityObject::roleDescription()
-{
-    // aria-roledescription takes precedence over any other rule.
-    if (supportsARIARoleDescription()) {
-        auto roleDescription = getAttributeTrimmed(aria_roledescriptionAttr);
-        if (!roleDescription.isEmpty())
-            return roleDescription;
-    }
-
-    auto roleDescription = rolePlatformDescription();
-    if (!roleDescription.isEmpty())
-        return roleDescription;
-
-    if (roleValue() == AccessibilityRole::Figure)
-        return AXFigureText();
-
-    if (roleValue() == AccessibilityRole::Suggestion)
-        return AXSuggestionRoleDescriptionText();
-
-    return { };
-}
-
 bool AccessibilityObject::supportsDatetimeAttribute() const
 {
-    return hasTagName(insTag) || hasTagName(delTag) || hasTagName(timeTag);
+    auto elementName = this->elementName();
+    return elementName == ElementName::HTML_ins || elementName == ElementName::HTML_del || elementName == ElementName::HTML_time;
 }
 
 String AccessibilityObject::datetimeAttributeValue() const
@@ -3285,6 +3270,7 @@ bool AccessibilityObject::supportsExpanded() const
             case CommandType::Custom:
             case CommandType::ShowModal:
             case CommandType::Close:
+            case CommandType::RequestClose:
                 break;
             default:
                 ASSERT_NOT_REACHED();
@@ -3840,10 +3826,11 @@ AccessibilityRole AccessibilityObject::buttonRoleType() const
     return AccessibilityRole::Button;
 }
 
-bool AccessibilityObject::isFileUploadButton() const
+std::optional<InputType::Type> AccessibilityObject::inputType() const
 {
     RefPtr input = dynamicDowncast<HTMLInputElement>(node());
-    return input && input->isFileUpload();
+    RefPtr inputType = input ? input->inputType() : nullptr;
+    return inputType ? std::optional(inputType->type()) : std::nullopt;
 }
 
 bool AccessibilityObject::isIgnoredByDefault() const
@@ -4061,10 +4048,10 @@ AccessibilityObject* AccessibilityObject::radioGroupAncestor() const
     });
 }
 
-const AtomString& AccessibilityObject::tagName() const
+ElementName AccessibilityObject::elementName() const
 {
     auto* element = this->element();
-    return element ? element->localName() : nullAtom();
+    return element ? element->elementName() : ElementName::Unknown;
 }
 
 bool AccessibilityObject::isStyleFormatGroup() const
@@ -4072,21 +4059,17 @@ bool AccessibilityObject::isStyleFormatGroup() const
     if (isCode())
         return true;
 
-    Node* node = this->node();
-    if (!node)
-        return false;
-    
-    return node->hasTagName(kbdTag) || node->hasTagName(codeTag)
-    || node->hasTagName(preTag) || node->hasTagName(sampTag)
-    || node->hasTagName(varTag) || node->hasTagName(citeTag)
-    || node->hasTagName(insTag) || node->hasTagName(delTag)
-    || node->hasTagName(supTag) || node->hasTagName(subTag);
+    auto elementName = this->elementName();
+    return elementName == ElementName::HTML_kbd || elementName == ElementName::HTML_code
+    || elementName == ElementName::HTML_pre || elementName == ElementName::HTML_samp
+    || elementName == ElementName::HTML_var || elementName == ElementName::HTML_cite
+    || elementName == ElementName::HTML_ins || elementName == ElementName::HTML_del
+    || elementName == ElementName::HTML_sup || elementName == ElementName::HTML_sub;
 }
 
 bool AccessibilityObject::isFigureElement() const
 {
-    Node* node = this->node();
-    return node && node->hasTagName(figureTag);
+    return elementName() == ElementName::HTML_figure;
 }
 
 bool AccessibilityObject::isKeyboardFocusable() const
@@ -4098,8 +4081,7 @@ bool AccessibilityObject::isKeyboardFocusable() const
 
 bool AccessibilityObject::isOutput() const
 {
-    Node* node = this->node();
-    return node && node->hasTagName(outputTag);
+    return elementName() == ElementName::HTML_output;
 }
     
 bool AccessibilityObject::isContainedBySecureField() const

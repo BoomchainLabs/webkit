@@ -27,7 +27,6 @@
 #include "CSSPropertyNames.h"
 #include "CSSValue.h"
 #include "CSSValueKeywords.h"
-#include "ExceptionOr.h"
 #include "LayoutUnit.h"
 #include <utility>
 #include <wtf/Forward.h>
@@ -41,6 +40,8 @@ class RenderStyle;
 class RenderView;
 
 struct Length;
+
+template<typename> class ExceptionOr;
 
 // Max/min values for CSS, needs to slightly smaller/larger than the true max/min values to allow for rounding without overflowing.
 // Subtract two (rather than one) to allow for values to be converted to float and back without exceeding the LayoutUnit::max.
@@ -751,6 +752,12 @@ inline bool isValueID(const RefPtr<CSSValue>& value, CSSValueID id)
 inline bool isValueID(const Ref<CSSValue>& value, CSSValueID id)
 {
     return isValueID(value.get(), id);
+}
+
+inline bool isCustomIdentValue(const CSSValue& value)
+{
+    auto* primitiveValue = dynamicDowncast<CSSPrimitiveValue>(value);
+    return primitiveValue && primitiveValue->isCustomIdent();
 }
 
 inline bool CSSValue::isValueID() const

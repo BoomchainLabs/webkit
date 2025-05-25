@@ -71,11 +71,9 @@ struct NetworkSessionCreationParameters {
     String cookiePersistentStoragePath;
     SoupCookiePersistentStorageType cookiePersistentStorageType { SoupCookiePersistentStorageType::Text };
     bool persistentCredentialStorageEnabled { true };
+    bool ignoreTLSErrors { false };
     WebCore::SoupNetworkProxySettings proxySettings;
     WebCore::HTTPCookieAcceptPolicy cookieAcceptPolicy { WebCore::HTTPCookieAcceptPolicy::ExclusivelyFromMainDocumentDomain };
-#endif
-#if USE(SOUP) || USE(CURL)
-    bool ignoreTLSErrors { false };
 #endif
 #if USE(CURL)
     String cookiePersistentStorageFile;
@@ -105,7 +103,6 @@ struct NetworkSessionCreationParameters {
     String webPushMachServiceName;
     String webPushPartitionString;
     bool enablePrivateClickMeasurementDebugMode { false };
-    bool isBlobRegistryTopOriginPartitioningEnabled { false };
     bool isOptInCookiePartitioningEnabled { false };
     bool shouldSendPrivateTokenIPCForTesting { false };
     uint64_t cookiesVersion { 0 };

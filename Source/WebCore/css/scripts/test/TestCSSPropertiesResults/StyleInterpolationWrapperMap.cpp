@@ -38,6 +38,7 @@ WrapperMap::WrapperMap()
         new Wrapper<float>(CSSPropertyID::CSSPropertyTestAnimationWrapper, &RenderStyle::testAnimationWrapper, &RenderStyle::setTestAnimationWrapper), // CSSPropertyID::CSSPropertyTestAnimationWrapper
         new Wrapper<float>(CSSPropertyID::CSSPropertyTestAnimationWrapperAccelerationAlways, &RenderStyle::testAnimationWrapperAccelerationAlways, &RenderStyle::setTestAnimationWrapperAccelerationAlways), // CSSPropertyID::CSSPropertyTestAnimationWrapperAccelerationAlways
         new Wrapper<float>(CSSPropertyID::CSSPropertyTestAnimationWrapperAccelerationThreadedOnly, &RenderStyle::testAnimationWrapperAccelerationThreadedOnly, &RenderStyle::setTestAnimationWrapperAccelerationThreadedOnly), // CSSPropertyID::CSSPropertyTestAnimationWrapperAccelerationThreadedOnly
+        new DiscreteWrapper(CSSPropertyID::CSSPropertyTestAutoFunctions, &RenderStyle::testAutoFunctions, &RenderStyle::setTestAutoFunctions), // CSSPropertyID::CSSPropertyTestAutoFunctions
         new DiscreteWrapper(CSSPropertyID::CSSPropertyTestBoundedRepetitionWithCommas, &RenderStyle::testBoundedRepetitionWithCommas, &RenderStyle::setTestBoundedRepetitionWithCommas), // CSSPropertyID::CSSPropertyTestBoundedRepetitionWithCommas
         new DiscreteWrapper(CSSPropertyID::CSSPropertyTestBoundedRepetitionWithCommasFixed, &RenderStyle::testBoundedRepetitionWithCommasFixed, &RenderStyle::setTestBoundedRepetitionWithCommasFixed), // CSSPropertyID::CSSPropertyTestBoundedRepetitionWithCommasFixed
         new DiscreteWrapper(CSSPropertyID::CSSPropertyTestBoundedRepetitionWithCommasNoSingleItemOpt, &RenderStyle::testBoundedRepetitionWithCommasNoSingleItemOpt, &RenderStyle::setTestBoundedRepetitionWithCommasNoSingleItemOpt), // CSSPropertyID::CSSPropertyTestBoundedRepetitionWithCommasNoSingleItemOpt
@@ -52,6 +53,10 @@ WrapperMap::WrapperMap()
         new DiscreteWrapper(CSSPropertyID::CSSPropertyTestBoundedRepetitionWithSpacesWithTypeWithDefaultPreviousTwo, &RenderStyle::testBoundedRepetitionWithSpacesWithTypeWithDefaultPreviousTwo, &RenderStyle::setTestBoundedRepetitionWithSpacesWithTypeWithDefaultPreviousTwo), // CSSPropertyID::CSSPropertyTestBoundedRepetitionWithSpacesWithTypeWithDefaultPreviousTwo
         new DiscreteWrapper(CSSPropertyID::CSSPropertyTestColor, &RenderStyle::testColor, &RenderStyle::setTestColor), // CSSPropertyID::CSSPropertyTestColor
         new DiscreteWrapper(CSSPropertyID::CSSPropertyTestColorAllowsTypesAbsolute, &RenderStyle::testColorAllowsTypesAbsolute, &RenderStyle::setTestColorAllowsTypesAbsolute), // CSSPropertyID::CSSPropertyTestColorAllowsTypesAbsolute
+        new DiscreteWrapper(CSSPropertyID::CSSPropertyTestColorPropertyWithNoVisitedLinkSupport, &RenderStyle::testColorPropertyWithNoVisitedLinkSupport, &RenderStyle::setTestColorPropertyWithNoVisitedLinkSupport), // CSSPropertyID::CSSPropertyTestColorPropertyWithNoVisitedLinkSupport
+        new DiscreteWrapper(CSSPropertyID::CSSPropertyTestColorPropertyWithVisitedLinkSupport, &RenderStyle::testColorPropertyWithVisitedLinkSupport, &RenderStyle::setTestColorPropertyWithVisitedLinkSupport, &RenderStyle::visitedLinkTestColorPropertyWithVisitedLinkSupport, &RenderStyle::setVisitedLinkTestColorPropertyWithVisitedLinkSupport), // CSSPropertyID::CSSPropertyTestColorPropertyWithVisitedLinkSupport
+        new DiscreteWrapper(CSSPropertyID::CSSPropertyTestCustomExtractor, &RenderStyle::testCustomExtractor, &RenderStyle::setTestCustomExtractor), // CSSPropertyID::CSSPropertyTestCustomExtractor
+        new DiscreteWrapper(CSSPropertyID::CSSPropertyTestExtractorConverter, &RenderStyle::testExtractorConverter, &RenderStyle::setTestExtractorConverter), // CSSPropertyID::CSSPropertyTestExtractorConverter
         new DiscreteWrapper(CSSPropertyID::CSSPropertyTestFunctionBoundedParameters, &RenderStyle::testFunctionBoundedParameters, &RenderStyle::setTestFunctionBoundedParameters), // CSSPropertyID::CSSPropertyTestFunctionBoundedParameters
         new DiscreteWrapper(CSSPropertyID::CSSPropertyTestFunctionFixedParameters, &RenderStyle::testFunctionFixedParameters, &RenderStyle::setTestFunctionFixedParameters), // CSSPropertyID::CSSPropertyTestFunctionFixedParameters
         new DiscreteWrapper(CSSPropertyID::CSSPropertyTestFunctionNoParameters, &RenderStyle::testFunctionNoParameters, &RenderStyle::setTestFunctionNoParameters), // CSSPropertyID::CSSPropertyTestFunctionNoParameters
@@ -111,6 +116,7 @@ WrapperMap::WrapperMap()
         new DiscreteWrapper(CSSPropertyID::CSSPropertyTestNumericValueRange, &RenderStyle::testNumericValueRange, &RenderStyle::setTestNumericValueRange), // CSSPropertyID::CSSPropertyTestNumericValueRange
         new DiscreteWrapper(CSSPropertyID::CSSPropertyTestProperty, &RenderStyle::testProperty, &RenderStyle::setTestProperty), // CSSPropertyID::CSSPropertyTestProperty
         new DiscreteWrapper(CSSPropertyID::CSSPropertyTestSettingsOne, &RenderStyle::testSettingsOne, &RenderStyle::setTestSettingsOne), // CSSPropertyID::CSSPropertyTestSettingsOne
+        new DiscreteWrapper(CSSPropertyID::CSSPropertyTestSharedBuilderExtractorConverter, &RenderStyle::testSharedBuilderExtractorConverter, &RenderStyle::setTestSharedBuilderExtractorConverter), // CSSPropertyID::CSSPropertyTestSharedBuilderExtractorConverter
         new DiscreteWrapper(CSSPropertyID::CSSPropertyTestUnboundedRepetitionWithCommasWithMin, &RenderStyle::testUnboundedRepetitionWithCommasWithMin, &RenderStyle::setTestUnboundedRepetitionWithCommasWithMin), // CSSPropertyID::CSSPropertyTestUnboundedRepetitionWithCommasWithMin
         new DiscreteWrapper(CSSPropertyID::CSSPropertyTestUnboundedRepetitionWithCommasWithMinNoSingleItemOpt, &RenderStyle::testUnboundedRepetitionWithCommasWithMinNoSingleItemOpt, &RenderStyle::setTestUnboundedRepetitionWithCommasWithMinNoSingleItemOpt), // CSSPropertyID::CSSPropertyTestUnboundedRepetitionWithCommasWithMinNoSingleItemOpt
         new DiscreteWrapper(CSSPropertyID::CSSPropertyTestUnboundedRepetitionWithCommasWithMinSingleItemOpt, &RenderStyle::testUnboundedRepetitionWithCommasWithMinSingleItemOpt, &RenderStyle::setTestUnboundedRepetitionWithCommasWithMinSingleItemOpt), // CSSPropertyID::CSSPropertyTestUnboundedRepetitionWithCommasWithMinSingleItemOpt
@@ -129,6 +135,7 @@ WrapperMap::WrapperMap()
         new DiscreteWrapper(CSSPropertyID::CSSPropertyTestLogicalPropertyGroupPhysicalVertical, &RenderStyle::testLogicalPropertyGroupPhysicalVertical, &RenderStyle::setTestLogicalPropertyGroupPhysicalVertical), // CSSPropertyID::CSSPropertyTestLogicalPropertyGroupPhysicalVertical
         nullptr, // CSSPropertyID::CSSPropertyTestLogicalPropertyGroupLogicalBlock - logical, handled via resolution to physical
         nullptr, // CSSPropertyID::CSSPropertyTestLogicalPropertyGroupLogicalInline - logical, handled via resolution to physical
+        nullptr, // CSSPropertyID::CSSPropertyAll - shorthand, will perform fix-up below
         nullptr, // CSSPropertyID::CSSPropertyFont - shorthand, will perform fix-up below
         nullptr, // CSSPropertyID::CSSPropertyTestShorthandOne - shorthand, will perform fix-up below
         nullptr, // CSSPropertyID::CSSPropertyTestShorthandTwo - shorthand, will perform fix-up below
@@ -136,6 +143,7 @@ WrapperMap::WrapperMap()
 {
     // Build animatable shorthand wrappers from longhand wrappers initialized above.
 
+    m_wrappers[CSSPropertyID::CSSPropertyAll] = makeShorthandWrapper(CSSPropertyID::CSSPropertyAll, m_wrappers);
     m_wrappers[CSSPropertyID::CSSPropertyFont] = makeShorthandWrapper(CSSPropertyID::CSSPropertyFont, m_wrappers);
     m_wrappers[CSSPropertyID::CSSPropertyTestShorthandOne] = makeShorthandWrapper(CSSPropertyID::CSSPropertyTestShorthandOne, m_wrappers);
     m_wrappers[CSSPropertyID::CSSPropertyTestShorthandTwo] = makeShorthandWrapper(CSSPropertyID::CSSPropertyTestShorthandTwo, m_wrappers);

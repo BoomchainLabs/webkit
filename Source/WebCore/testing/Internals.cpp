@@ -85,6 +85,8 @@
 #include "EventListener.h"
 #include "EventLoop.h"
 #include "EventNames.h"
+#include "EventTargetForTesting.h"
+#include "EventTargetInlines.h"
 #include "ExtendableEvent.h"
 #include "ExtensionStyleSheets.h"
 #include "FetchRequest.h"
@@ -95,6 +97,7 @@
 #include "FormController.h"
 #include "FragmentDirectiveGenerator.h"
 #include "FrameLoader.h"
+#include "FrameMemoryMonitor.h"
 #include "GCObservation.h"
 #include "GridPosition.h"
 #include "HEVCUtilities.h"
@@ -208,6 +211,7 @@
 #include "SVGSVGElement.h"
 #include "SWClientConnection.h"
 #include "ScriptController.h"
+#include "ScriptExecutionContextInlines.h"
 #include "ScriptedAnimationController.h"
 #include "ScrollToOptions.h"
 #include "ScrollbarsControllerMock.h"
@@ -7774,6 +7778,11 @@ bool Internals::isEffectivelyMuted(const HTMLMediaElement& element)
 {
     return element.effectiveMuted();
 }
+
+Ref<EventTarget> Internals::addInternalEventTarget(HTMLMediaElement& element)
+{
+    return EventTargetForTesting::create(element.document(), element);
+}
 #endif
 
 std::optional<RenderingMode> Internals::getEffectiveRenderingModeOfNewlyCreatedAcceleratedImageBuffer()
@@ -7814,6 +7823,18 @@ void Internals::setResourceCachingDisabledByWebInspector(bool disabled)
         return;
 
     document->page()->setResourceCachingDisabledByWebInspector(disabled);
+}
+
+ExceptionOr<void> Internals::lowerAllFrameMemoryMonitorLimits()
+{
+    RefPtr document = contextDocument();
+
+    if (!document || !document->frame())
+        return Exception { ExceptionCode::InvalidAccessError };
+
+
+    document->frameMemoryMonitor().lowerAllMemoryLimitsForTesting();
+    return { };
 }
 
 void Internals::setTopDocumentURLForQuirks(const String& urlString)
@@ -7871,13 +7892,9 @@ ExceptionOr<Vector<Internals::FrameDamage>> Internals::getFrameDamageHistory() c
     if (!document || !document->page())
         return Exception { ExceptionCode::NotSupportedError };
 
-    const auto* damageForTesting = document->page()->chrome().client().damageHistoryForTesting();
-    if (!damageForTesting)
-        return Exception { ExceptionCode::NotSupportedError };
-
     Vector<Internals::FrameDamage> damageDetails;
     size_t sequenceId = 0;
-    for (const auto& region : damageForTesting->damageInformation()) {
+    document->page()->chrome().client().foreachRegionInDamageHistoryForTesting([&](const auto& region) {
         FrameDamage details;
         details.sequenceId = sequenceId++;
 
@@ -7889,9 +7906,20 @@ ExceptionOr<Vector<Internals::FrameDamage>> Internals::getFrameDamageHistory() c
             return DOMRectReadOnly::create(rect.x(), rect.y(), rect.width(), rect.height());
         });
         damageDetails.append(WTFMove(details));
-    }
+    });
 
     return damageDetails;
+}
+#endif
+
+#if ENABLE(MODEL_ELEMENT)
+void Internals::disableModelLoadDelaysForTesting()
+{
+    RefPtr document = contextDocument();
+    if (!document || !document->page())
+        return;
+
+    document->page()->disableModelLoadDelaysForTesting();
 }
 #endif
 

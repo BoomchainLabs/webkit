@@ -46,6 +46,7 @@
 #include <WebCore/GraphicsContext.h>
 #include <WebCore/MediaPlayer.h>
 #include <WebCore/MediaStrategy.h>
+#include <WebCore/MessageClientForTesting.h>
 #include <WebCore/NotImplemented.h>
 #include <WebCore/PlatformScreen.h>
 #include <WebCore/PlatformStrategies.h>
@@ -1530,6 +1531,12 @@ size_t MediaPlayerPrivateRemote::extraMemoryCost() const
     return 0;
 }
 
+void MediaPlayerPrivateRemote::reportGPUMemoryFootprint(uint64_t footPrint)
+{
+    if (auto player = m_player.get())
+        player->reportGPUMemoryFootprint(footPrint);
+}
+
 void MediaPlayerPrivateRemote::updateVideoPlaybackMetricsUpdateInterval(const Seconds& interval)
 {
     m_videoPlaybackMetricsUpdateInterval = interval;
@@ -1886,6 +1893,25 @@ void MediaPlayerPrivateRemote::sceneIdentifierDidChange()
         protectedConnection()->send(Messages::RemoteMediaPlayerProxy::SetSceneIdentifier(player->sceneIdentifier()), m_id);
 }
 #endif
+
+void MediaPlayerPrivateRemote::setMessageClientForTesting(WeakPtr<MessageClientForTesting> client)
+{
+    m_internalMessageClient = WTFMove(client);
+    protectedConnection()->send(Messages::RemoteMediaPlayerProxy::SetHasMessageClientForTesting(!!m_internalMessageClient), m_id);
+}
+
+void MediaPlayerPrivateRemote::sendInternalMessage(const WebCore::MessageForTesting& message)
+{
+    if (RefPtr client = m_internalMessageClient.get()) {
+        client->sendInternalMessage(message);
+        return;
+    }
+
+    // We were sent a message, but no internal message client exists. Notify the
+    // GPU process that we have no internal message client.
+    protectedConnection()->send(Messages::RemoteMediaPlayerProxy::SetHasMessageClientForTesting(false), m_id);
+}
+
 
 } // namespace WebKit
 

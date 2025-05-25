@@ -199,6 +199,7 @@ MESSAGE_RECEIVERS = \
 	UIProcess/SpeechRecognitionServer \
 	UIProcess/XR/PlatformXRSystem \
 	WebProcess/Databases/IndexedDB/WebIDBConnectionToServer \
+	WebProcess/DigitalCredentials/DigitalCredentialsCoordinator \
 	WebProcess/Extensions/WebExtensionContextProxy \
 	WebProcess/Extensions/WebExtensionControllerProxy \
 	WebProcess/GPU/GPUProcessConnection \
@@ -720,6 +721,7 @@ SERIALIZATION_DESCRIPTION_FILES = \
 	Shared/ios/HardwareKeyboardState.serialization.in \
 	Shared/ios/InteractionInformationAtPosition.serialization.in \
 	Shared/ios/InteractionInformationRequest.serialization.in \
+	Shared/ios/DragInitiationResult.serialization.in \
 	Shared/ios/WebAutocorrectionContext.serialization.in \
 	Shared/ios/WebAutocorrectionData.serialization.in \
 	Shared/JavaScriptCore.serialization.in \
@@ -1012,8 +1014,17 @@ all : JSWebExtensionAPIUnified.mm $(EXTENSION_INTERFACES:%=JS%.h) $(EXTENSION_IN
 ifeq ($(USE_INTERNAL_SDK),YES)
 WEBKIT_ADDITIONS_SWIFT_FILES = \
 	MaterialAdditions.swift \
+	WebPageWebViewAdditions.swift \
 	WKSeparatedImageView.swift \
 	CredentialUpdaterShim.swift \
+	ISO18013MobileDocumentRequest+Extras.swift \
+	WKIdentityDocumentPresentmentController.swift \
+	WKIdentityDocumentPresentmentMobileDocumentRequest.swift \
+	WKIdentityDocumentPresentmentMobileDocumentRequest+Extras.swift \
+	WKIdentityDocumentPresentmentRawRequest.swift \
+	WKIdentityDocumentPresentmentRequest.swift \
+	WKIdentityDocumentPresentmentResponse.swift \
+	WKIdentityDocumentRawRequestValidator.swift \
 	WKPDFPageNumberIndicatorAdditions.swift \
 #
 

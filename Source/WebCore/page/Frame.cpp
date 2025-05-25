@@ -33,11 +33,13 @@
 #include "HTMLIFrameElement.h"
 #include "LocalDOMWindow.h"
 #include "NavigationScheduler.h"
+#include "OwnerPermissionsPolicyData.h"
 #include "Page.h"
 #include "RemoteFrame.h"
 #include "RenderElement.h"
 #include "RenderWidget.h"
 #include "ScrollingCoordinator.h"
+#include "Settings.h"
 #include "WindowProxy.h"
 #include <wtf/NeverDestroyed.h>
 
@@ -117,6 +119,7 @@ Frame::Frame(Page& page, FrameIdentifier frameID, FrameType frameType, HTMLFrame
     , m_opener(opener)
     , m_frameTreeSyncData(WTFMove(frameTreeSyncData))
 {
+    relaxAdoptionRequirement();
     if (parent)
         parent->tree().appendChild(*this);
 
@@ -277,13 +280,13 @@ void Frame::setOwnerElement(HTMLFrameOwnerElement* element)
 
 void Frame::setOwnerPermissionsPolicy(OwnerPermissionsPolicyData&& ownerPermissionsPolicy)
 {
-    m_ownerPermisssionsPolicyOverride = WTFMove(ownerPermissionsPolicy);
+    m_ownerPermisssionsPolicyOverride = makeUnique<OwnerPermissionsPolicyData>(WTFMove(ownerPermissionsPolicy));
 }
 
 std::optional<OwnerPermissionsPolicyData> Frame::ownerPermissionsPolicy() const
 {
     if (m_ownerPermisssionsPolicyOverride)
-        return m_ownerPermisssionsPolicyOverride;
+        return *m_ownerPermisssionsPolicyOverride;
 
     RefPtr owner = ownerElement();
     if (!owner)

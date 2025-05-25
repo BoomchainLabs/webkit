@@ -27,6 +27,7 @@
 
 #if USE(COORDINATED_GRAPHICS)
 #include "FloatRect.h"
+#include "LayoutSize.h"
 #include "Region.h"
 #include <wtf/ForbidHeapAllocation.h>
 
@@ -113,26 +114,12 @@ public:
     ALWAYS_INLINE bool isEmpty() const  { return m_rects.isEmpty(); }
     ALWAYS_INLINE Mode mode() const { return m_mode; }
 
-    // Removes empty and overlapping rects. May clip to grid.
-    Rects rectsForPainting() const
+    Region regionForTesting() const
     {
-        if (m_rects.size() <= 1 || m_mode != Mode::Rectangles)
-            return m_rects;
-
-        Rects rects;
-        for (int row = 0; row < m_gridCells.height(); ++row) {
-            for (int col = 0; col < m_gridCells.width(); ++col) {
-                const IntRect cellRect = { { m_rect.x() + col * m_cellSize.width(), m_rect.y() + row * m_cellSize.height() }, m_cellSize };
-                IntRect minimumBoundingRectangleContaingOverlaps;
-                for (const auto& rect : m_rects) {
-                    if (!rect.isEmpty())
-                        minimumBoundingRectangleContaingOverlaps.unite(intersection(cellRect, rect));
-                }
-                if (!minimumBoundingRectangleContaingOverlaps.isEmpty())
-                    rects.append(minimumBoundingRectangleContaingOverlaps);
-            }
-        }
-        return rects;
+        Region region;
+        for (const auto& rect : m_rects)
+            region.unite(Region { rect });
+        return region;
     }
 
     void makeFull()
@@ -351,26 +338,6 @@ private:
     IntRect m_minimumBoundingRectangle;
 
     friend bool operator==(const Damage&, const Damage&) = default;
-};
-
-class FrameDamageHistory {
-    WTF_MAKE_FAST_ALLOCATED;
-public:
-    const Vector<Region>& damageInformation() const { return m_damageInfo; }
-
-    void addDamage(const Damage& damage)
-    {
-        Region region;
-        for (const auto& rect : damage.rects()) {
-            Region subRegion(rect);
-            region.unite(subRegion);
-        }
-        m_damageInfo.append(WTFMove(region));
-    }
-
-private:
-    // Use a Region to remove overlaps so that Damage rects are more predictable from the testing perspective.
-    Vector<Region> m_damageInfo;
 };
 
 static inline WTF::TextStream& operator<<(WTF::TextStream& ts, const Damage& damage)

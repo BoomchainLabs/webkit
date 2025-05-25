@@ -128,7 +128,7 @@ void ParentalControlsContentFilter::responseReceived(const ResourceResponse& res
 #else
         auto& filter = ParentalControlsURLFilter::singleton();
 #endif
-        filter.isURLAllowed(*m_evaluatedURL, [weakThis = ThreadSafeWeakPtr { *this }](bool isAllowed, auto replacementData) {
+        filter.isURLAllowedWithQueue(*m_evaluatedURL, [weakThis = ThreadSafeWeakPtr { *this }](bool isAllowed, auto replacementData) {
             if (RefPtr protectedThis = weakThis.get())
                 protectedThis->didReceiveAllowDecisionOnQueue(isAllowed, replacementData);
         }, globalQueue());
@@ -177,6 +177,7 @@ void ParentalControlsContentFilter::finishedAddingData()
         Locker resultLocker { m_resultLock };
         while (!m_isAllowdByWebContentRestrictions)
             m_resultCondition.wait(m_resultLock);
+
         m_state = *m_isAllowdByWebContentRestrictions ? State::Allowed : State::Blocked;
         m_replacementData = std::exchange(m_webContentRestrictionsReplacementData, nullptr);
         return;
@@ -239,13 +240,13 @@ void ParentalControlsContentFilter::updateFilterState()
 
 void ParentalControlsContentFilter::didReceiveAllowDecisionOnQueue(bool isAllowed, NSData *replacementData)
 {
-    ASSERT(!isMainThread());
+    RELEASE_ASSERT(!isMainThread());
 
     Locker resultLocker { m_resultLock };
     ASSERT(!m_isAllowdByWebContentRestrictions);
     m_isAllowdByWebContentRestrictions = isAllowed;
     m_webContentRestrictionsReplacementData = replacementData;
-
+    m_resultCondition.notifyOne();
     callOnMainRunLoop([weakThis = ThreadSafeWeakPtr { *this }]() {
         if (RefPtr protectedThis = weakThis.get())
             protectedThis->updateFilterStateOnMain();

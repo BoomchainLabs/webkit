@@ -105,13 +105,20 @@ class Attachment;
 namespace WebCore {
 struct AppHighlight;
 struct ExceptionDetails;
-struct DigitalCredentialsRequestData;
 struct TextAnimationData;
 enum class BoxSide : uint8_t;
 enum class WheelScrollGestureState : uint8_t;
+
 namespace WritingTools {
 enum class TextSuggestionState : uint8_t;
 }
+
+#if HAVE(DIGITAL_CREDENTIALS_UI)
+struct DigitalCredentialsRequestData;
+struct MobileDocumentRequest;
+struct OpenID4VPRequest;
+#endif
+
 }
 
 namespace WebKit {
@@ -269,6 +276,7 @@ struct PerWebProcessState {
     _WKSelectionAttributes _selectionAttributes;
     _WKRenderingProgressEvents _observedRenderingProgressEvents;
     BOOL _usePlatformFindUI;
+    BOOL _usesAutomaticContentInsetBackgroundFill;
 
     CocoaEdgeInsets _minimumViewportInset;
     CocoaEdgeInsets _maximumViewportInset;

@@ -97,8 +97,6 @@ void RenderFragmentedFlow::invalidateFragments(MarkingBehavior markingParents)
     }
 
     m_fragmentRangeMap.clear();
-    m_breakBeforeToFragmentMap.clear();
-    m_breakAfterToFragmentMap.clear();
     if (m_lineToFragmentMap)
         m_lineToFragmentMap->clear();
     setNeedsLayout(markingParents);
@@ -375,7 +373,7 @@ RenderFragmentContainer* RenderFragmentedFlow::mapFromFlowToFragment(TransformSt
     return RenderFragmentContainer;
 }
 
-void RenderFragmentedFlow::removeRenderBoxFragmentInfo(RenderBox& box)
+void RenderFragmentedFlow::removeRenderBoxFragmentInfo(const RenderBox& box)
 {
     if (!hasFragments())
         return;
@@ -403,7 +401,7 @@ void RenderFragmentedFlow::removeRenderBoxFragmentInfo(RenderBox& box)
         ASSERT_UNUSED(fragment, !fragment.renderBoxFragmentInfo(box));
 #endif
 
-    m_fragmentRangeMap.remove(&box);
+    m_fragmentRangeMap.remove(box);
 }
 
 void RenderFragmentedFlow::removeLineFragmentInfo(const RenderBlockFlow& blockFlow)
@@ -422,7 +420,7 @@ void RenderFragmentedFlow::logicalWidthChangedInFragmentsForBlock(const RenderBl
     if (!hasValidFragmentInfo())
         return;
 
-    auto it = m_fragmentRangeMap.find(&block);
+    auto it = m_fragmentRangeMap.find(block);
     if (it == m_fragmentRangeMap.end())
         return;
 
@@ -452,7 +450,7 @@ void RenderFragmentedFlow::logicalWidthChangedInFragmentsForBlock(const RenderBl
         ASSERT(!fragment.needsLayout() || fragment.isRenderFragmentContainerSet());
 
         // We have no information computed for this fragment so we need to do it.
-        std::unique_ptr<RenderBoxFragmentInfo> oldInfo = fragment.takeRenderBoxFragmentInfo(&block);
+        std::unique_ptr<RenderBoxFragmentInfo> oldInfo = fragment.takeRenderBoxFragmentInfo(block);
         if (!oldInfo) {
             relayoutChildren = rangeInvalidated ? RelayoutChildren::Yes : RelayoutChildren::No;
             return;
@@ -538,7 +536,7 @@ void RenderFragmentedFlow::setFragmentRangeForBox(const RenderBox& box, RenderFr
 {
     ASSERT(hasFragments());
     ASSERT(startFragment && endFragment && startFragment->fragmentedFlow() == this && endFragment->fragmentedFlow() == this);
-    auto result = m_fragmentRangeMap.set(box, RenderFragmentContainerRange(startFragment, endFragment));
+    auto result = m_fragmentRangeMap.add(box, RenderFragmentContainerRange(startFragment, endFragment));
     if (result.isNewEntry)
         return;
 
@@ -551,7 +549,7 @@ void RenderFragmentedFlow::setFragmentRangeForBox(const RenderBox& box, RenderFr
 
 bool RenderFragmentedFlow::hasCachedFragmentRangeForBox(const RenderBox& box) const
 {
-    return m_fragmentRangeMap.contains(&box);
+    return m_fragmentRangeMap.contains(box);
 }
 
 bool RenderFragmentedFlow::getFragmentRangeForBoxFromCachedInfo(const RenderBox& box, RenderFragmentContainer*& startFragment, RenderFragmentContainer*& endFragment) const
@@ -559,7 +557,7 @@ bool RenderFragmentedFlow::getFragmentRangeForBoxFromCachedInfo(const RenderBox&
     ASSERT(hasValidFragmentInfo());
     ASSERT((startFragment == nullptr) && (endFragment == nullptr));
 
-    auto it = m_fragmentRangeMap.find(&box);
+    auto it = m_fragmentRangeMap.find(box);
     if (it != m_fragmentRangeMap.end()) {
         const RenderFragmentContainerRange& range = it->value;
         startFragment = range.startFragment();

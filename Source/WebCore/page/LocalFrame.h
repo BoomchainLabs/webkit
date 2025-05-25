@@ -27,22 +27,13 @@
 
 #pragma once
 
-#include "AdjustViewSizeOrNot.h"
 #include "DOMPasteAccess.h"
 #include "Frame.h"
-#include "RegistrableDomain.h"
-#include "ScrollTypes.h"
-#include "UserScriptTypes.h"
+#include "ScrollbarMode.h"
 #include <wtf/CheckedRef.h>
 #include <wtf/HashSet.h>
 #include <wtf/UniqueRef.h>
 #include <wtf/WeakRef.h>
-
-#if PLATFORM(IOS_FAMILY)
-#include "Timer.h"
-#include "ViewportArguments.h"
-#include "VisibleSelection.h"
-#endif
 
 #if PLATFORM(WIN)
 #include "FrameWin.h"
@@ -71,11 +62,13 @@ namespace WebCore {
 
 class Color;
 class LocalDOMWindow;
+class DOMWrapperWorld;
 class DataDetectionResultsStorage;
 class Document;
 class Editor;
 class Element;
 class EventHandler;
+class FloatPoint;
 class FloatSize;
 class FrameDestructionObserver;
 class FrameLoader;
@@ -91,21 +84,32 @@ class LocalFrameLoaderClient;
 class LocalFrameView;
 class Node;
 class Page;
+class RegistrableDomain;
 class RenderLayer;
 class RenderView;
 class RenderWidget;
 class ResourceMonitor;
 class ScriptController;
 class SecurityOrigin;
+class UserScript;
 class VisiblePosition;
 class Widget;
 
+enum class AdjustViewSize : bool;
+
+#if PLATFORM(IOS_FAMILY)
+class VisibleSelection;
+struct ViewportArguments;
+#endif
+
 enum class SandboxFlag : uint16_t;
+enum class UserScriptInjectionTime : bool;
 enum class WindowProxyProperty : uint8_t;
 
 using SandboxFlags = OptionSet<SandboxFlag>;
 using IntDegrees = int32_t;
 
+struct OverrideScreenSize;
 struct SimpleRange;
 
 #if PLATFORM(IOS_FAMILY)
@@ -204,7 +208,7 @@ public:
 
     WEBCORE_EXPORT static LocalFrame* frameForWidget(const Widget&);
 
-    WEBCORE_EXPORT void setPrinting(bool printing, const FloatSize& pageSize, const FloatSize& originalPageSize, float maximumShrinkRatio, AdjustViewSizeOrNot);
+    WEBCORE_EXPORT void setPrinting(bool printing, const FloatSize& pageSize, const FloatSize& originalPageSize, float maximumShrinkRatio, AdjustViewSize);
     bool shouldUsePrintingLayout() const;
     WEBCORE_EXPORT FloatSize resizePageRectsKeepingRatio(const FloatSize& originalSize, const FloatSize& expectedSize);
 
@@ -279,8 +283,8 @@ public:
 #if PLATFORM(IOS_FAMILY)
     WEBCORE_EXPORT int preferredHeight() const;
     WEBCORE_EXPORT void updateLayout() const;
-    WEBCORE_EXPORT NSRect caretRect();
-    WEBCORE_EXPORT NSRect rectForScrollToVisible();
+    WEBCORE_EXPORT IntRect caretRect();
+    WEBCORE_EXPORT IntRect rectForScrollToVisible();
 
     // This function is used by Legacy WebKit.
     WEBCORE_EXPORT void setTimersPaused(bool);
@@ -325,6 +329,7 @@ public:
     String customUserAgentAsSiteSpecificQuirks() const final;
     String customNavigatorPlatform() const final;
     OptionSet<AdvancedPrivacyProtections> advancedPrivacyProtections() const final;
+    AutoplayPolicy autoplayPolicy() const final;
 
     WEBCORE_EXPORT SandboxFlags effectiveSandboxFlags() const;
     SandboxFlags sandboxFlagsFromSandboxAttributeNotCSP() { return m_sandboxFlags; }
@@ -333,6 +338,7 @@ public:
     ScrollbarMode scrollingMode() const { return m_scrollingMode; }
     WEBCORE_EXPORT void updateScrollingMode() final;
     WEBCORE_EXPORT void setScrollingMode(ScrollbarMode);
+    WEBCORE_EXPORT void showMemoryMonitorError();
 
 #if ENABLE(CONTENT_EXTENSIONS)
     WEBCORE_EXPORT void showResourceMonitoringError();
@@ -386,10 +392,10 @@ private:
 
     void setTimersPausedInternal(bool);
 
-    ViewportArguments m_viewportArguments;
+    UniqueRef<ViewportArguments> m_viewportArguments;
+    UniqueRef<VisibleSelection> m_rangedSelectionBase;
+    UniqueRef<VisibleSelection> m_rangedSelectionInitialExtent;
     bool m_selectionChangeCallbacksDisabled { false };
-    VisibleSelection m_rangedSelectionBase;
-    VisibleSelection m_rangedSelectionInitialExtent;
 #endif
 
     float m_pageZoomFactor;
@@ -402,17 +408,16 @@ private:
     unsigned m_selfOnlyRefCount { 0 };
     bool m_hasHadUserInteraction { false };
 
-
 #if ENABLE(WINDOW_PROXY_PROPERTY_ACCESS_NOTIFICATION)
     OptionSet<WindowProxyProperty> m_accessedWindowProxyPropertiesViaOpener;
 #endif
 
-    FloatSize m_overrideScreenSize;
+    std::unique_ptr<OverrideScreenSize> m_overrideScreenSize;
 
     const WeakPtr<LocalFrame> m_rootFrame;
     SandboxFlags m_sandboxFlags;
     UniqueRef<EventHandler> m_eventHandler;
-    UncheckedKeyHashSet<RegistrableDomain> m_storageAccessExceptionDomains;
+    std::unique_ptr<HashSet<RegistrableDomain>> m_storageAccessExceptionDomains;
 };
 
 WTF::TextStream& operator<<(WTF::TextStream&, const LocalFrame&);

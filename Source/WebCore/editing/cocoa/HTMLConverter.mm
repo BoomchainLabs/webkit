@@ -60,6 +60,7 @@
 #import "HTMLOListElement.h"
 #import "HTMLTableCellElement.h"
 #import "HTMLTextAreaElement.h"
+#import "ImageAdapter.h"
 #import "LoaderNSURLExtras.h"
 #import "LocalFrame.h"
 #import "LocalizedStrings.h"
@@ -67,6 +68,7 @@
 #import "Quirks.h"
 #import "RenderImage.h"
 #import "RenderText.h"
+#import "StyleExtractor.h"
 #import "StyleProperties.h"
 #import "StyledElement.h"
 #import "TextIterator.h"
@@ -154,7 +156,7 @@ public:
     bool isAncestorsOfStartToBeConverted(Node& node) const { return m_ancestorsUnderCommonAncestor.contains(&node); }
 
 private:
-    UncheckedKeyHashMap<Element*, std::unique_ptr<ComputedStyleExtractor>> m_computedStyles;
+    UncheckedKeyHashMap<Element*, std::unique_ptr<WebCore::Style::Extractor>> m_computedStyles;
     NodeSet m_ancestorsUnderCommonAncestor;
 };
 
@@ -442,8 +444,8 @@ RefPtr<CSSValue> HTMLConverterCaches::computedStylePropertyForElement(Element& e
 
     auto result = m_computedStyles.add(&element, nullptr);
     if (result.isNewEntry)
-        result.iterator->value = makeUnique<ComputedStyleExtractor>(&element, true);
-    ComputedStyleExtractor& computedStyle = *result.iterator->value;
+        result.iterator->value = makeUnique<WebCore::Style::Extractor>(&element, true);
+    auto& computedStyle = *result.iterator->value;
     return computedStyle.propertyValue(propertyId);
 }
 

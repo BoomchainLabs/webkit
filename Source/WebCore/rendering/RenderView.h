@@ -175,7 +175,7 @@ public:
 
     uint64_t rendererCount() const { return m_rendererCount; }
     void didCreateRenderer() { ++m_rendererCount; }
-    void didDestroyRenderer() { --m_rendererCount; }
+    void willDestroyRenderer() { --m_rendererCount; }
 
     void updateVisibleViewportRect(const IntRect&);
     void registerForVisibleInViewportCallback(RenderElement&);
@@ -216,8 +216,8 @@ public:
     void unregisterPositionTryBox(const RenderBox&);
     const SingleThreadWeakHashSet<const RenderBox>& positionTryBoxes() const { return m_positionTryBoxes; }
 
-    SingleThreadWeakPtr<RenderBlockFlow> viewTransitionRoot() const;
-    void setViewTransitionRoot(RenderBlockFlow& renderer);
+    SingleThreadWeakPtr<RenderBlockFlow> viewTransitionContainingBlock() const;
+    void setViewTransitionContainingBlock(RenderBlockFlow& renderer);
 
     void addViewTransitionGroup(const AtomString&, RenderBox&);
     void removeViewTransitionGroup(const AtomString&);
@@ -293,7 +293,7 @@ private:
     SingleThreadWeakHashSet<const RenderBoxModelObject> m_anchors;
     SingleThreadWeakHashSet<const RenderBox> m_positionTryBoxes;
 
-    SingleThreadWeakPtr<RenderBlockFlow> m_viewTransitionRoot;
+    SingleThreadWeakPtr<RenderBlockFlow> m_viewTransitionContainingBlock;
     HashMap<AtomString, SingleThreadWeakPtr<RenderBox>> m_viewTransitionGroups;
 };
 

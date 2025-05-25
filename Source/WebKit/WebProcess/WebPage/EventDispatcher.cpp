@@ -38,7 +38,9 @@
 #include "WebWheelEvent.h"
 #include <WebCore/DisplayUpdate.h>
 #include <WebCore/HandleUserInputEventResult.h>
+#include <WebCore/KeyboardScrollingAnimator.h>
 #include <WebCore/Page.h>
+#include <WebCore/PageInlines.h>
 #include <WebCore/WheelEventTestMonitor.h>
 #include <wtf/MainThread.h>
 #include <wtf/RunLoop.h>

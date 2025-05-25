@@ -32,13 +32,13 @@
 
 #include "EventListenerMap.h"
 #include "EventListenerOptions.h"
-#include "ExceptionOr.h"
 #include "ScriptWrappable.h"
 #include <memory>
 #include <wtf/CheckedPtr.h>
 #include <wtf/Forward.h>
 #include <wtf/TZoneMalloc.h>
 #include <wtf/WeakPtr.h>
+#include <wtf/WeakPtrImpl.h>
 
 namespace JSC {
 class JSValue;
@@ -48,10 +48,11 @@ class JSObject;
 namespace WebCore {
 
 enum class EventTargetInterfaceType : uint8_t;
-struct AddEventListenerOptions;
 class DOMWrapperWorld;
 class EventTarget;
 class JSEventListener;
+struct AddEventListenerOptions;
+template<typename> class ExceptionOr;
 
 struct EventTargetData {
     WTF_MAKE_TZONE_ALLOCATED(EventTargetData);
@@ -79,7 +80,7 @@ private:
     EventTargetData m_eventTargetData;
 };
 
-class EventTarget : public ScriptWrappable, public CanMakeWeakPtrWithBitField<EventTarget, WeakPtrFactoryInitialization::Lazy, WeakPtrImplWithEventTargetData> {
+class WEBCORE_EXPORT EventTarget : public ScriptWrappable, public CanMakeWeakPtrWithBitField<EventTarget, WeakPtrFactoryInitialization::Lazy, WeakPtrImplWithEventTargetData> {
     WTF_MAKE_TZONE_OR_ISO_ALLOCATED(EventTarget);
 public:
     static Ref<EventTarget> create(ScriptExecutionContext&);
@@ -90,20 +91,20 @@ public:
     virtual enum EventTargetInterfaceType eventTargetInterface() const = 0;
     virtual ScriptExecutionContext* scriptExecutionContext() const = 0;
 
-    WEBCORE_EXPORT virtual bool isPaymentRequest() const;
+    virtual bool isPaymentRequest() const;
 
     using AddEventListenerOptionsOrBoolean = Variant<AddEventListenerOptions, bool>;
-    WEBCORE_EXPORT void addEventListenerForBindings(const AtomString& eventType, RefPtr<EventListener>&&, AddEventListenerOptionsOrBoolean&&);
+    void addEventListenerForBindings(const AtomString& eventType, RefPtr<EventListener>&&, AddEventListenerOptionsOrBoolean&&);
     using EventListenerOptionsOrBoolean = Variant<EventListenerOptions, bool>;
-    WEBCORE_EXPORT void removeEventListenerForBindings(const AtomString& eventType, RefPtr<EventListener>&&, EventListenerOptionsOrBoolean&&);
-    WEBCORE_EXPORT ExceptionOr<bool> dispatchEventForBindings(Event&);
+    void removeEventListenerForBindings(const AtomString& eventType, RefPtr<EventListener>&&, EventListenerOptionsOrBoolean&&);
+    ExceptionOr<bool> dispatchEventForBindings(Event&);
 
-    WEBCORE_EXPORT virtual bool addEventListener(const AtomString& eventType, Ref<EventListener>&&, const AddEventListenerOptions&);
-    WEBCORE_EXPORT virtual bool removeEventListener(const AtomString& eventType, EventListener&, const EventListenerOptions& = { });
+    virtual bool addEventListener(const AtomString& eventType, Ref<EventListener>&&, const AddEventListenerOptions&);
+    virtual bool removeEventListener(const AtomString& eventType, EventListener&, const EventListenerOptions& = { });
 
-    WEBCORE_EXPORT virtual void removeAllEventListeners();
-    WEBCORE_EXPORT virtual void dispatchEvent(Event&);
-    WEBCORE_EXPORT virtual void uncaughtExceptionInEventHandler();
+    virtual void removeAllEventListeners();
+    virtual void dispatchEvent(Event&);
+    virtual void uncaughtExceptionInEventHandler();
 
     static const AtomString& legacyTypeForEvent(const Event&);
 
@@ -156,7 +157,7 @@ protected:
         setEventTargetFlag(EventTargetFlag::IsNode, true);
     }
 
-    WEBCORE_EXPORT virtual ~EventTarget();
+    virtual ~EventTarget();
 
     // Flags for ownership & relationship.
     enum class EventTargetFlag : uint16_t {

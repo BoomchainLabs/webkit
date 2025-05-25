@@ -1,4 +1,4 @@
-<!DOCTYPE html> <!-- webkit-test-runner [ ContentInsetBackgroundFillEnabled=true useFlexibleViewport=true ] -->
+<!DOCTYPE html> <!-- webkit-test-runner [ ContentInsetBackgroundFillEnabled=true pageTopColorSamplingEnabled=true useFlexibleViewport=true ] -->
 <html>
 <head>
     <meta charset="utf-8">
@@ -47,8 +47,8 @@
         await UIHelper.ensurePresentationUpdate();
         colorAfterFading = await UIHelper.fixedContainerEdgeColors();
 
-        shouldBeEqualToString("colorBeforeFading.top", "rgba(255, 100, 0, 0.8)");
-        shouldBeNull("colorAfterFading.top");
+        shouldBeEqualToString("colorBeforeFading.top", "rgb(255, 100, 0)");
+        shouldBeEqualToString("colorAfterFading.top", "rgb(255, 100, 0)");
         finishJSTest();
     });
     </script>

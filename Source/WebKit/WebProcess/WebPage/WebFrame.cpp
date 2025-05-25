@@ -456,7 +456,7 @@ void WebFrame::createProvisionalFrame(ProvisionalFrameCreationParameters&& param
     m_provisionalFrame = localFrame.ptr();
     m_frameIDBeforeProvisionalNavigation = parameters.frameIDBeforeProvisionalNavigation;
     localFrame->init();
-    localFrame->protectedDocument()->setURL(aboutBlankURL());
+    localFrame->protectedDocument()->setURL(URL { aboutBlankURL() });
 
     if (parameters.layerHostingContextIdentifier)
         setLayerHostingContextIdentifier(*parameters.layerHostingContextIdentifier);
@@ -582,6 +582,7 @@ void WebFrame::didReceivePolicyDecision(uint64_t listenerID, PolicyDecision&& po
 
     if (!m_coreFrame)
         return;
+    setIsSafeBrowsingCheckOngoing(policyDecision.isSafeBrowsingCheckOngoing);
 
     auto policyCheck = m_pendingPolicyChecks.take(listenerID);
     if (!policyCheck.policyFunction)
@@ -1508,6 +1509,26 @@ uint64_t WebFrame::messageSenderDestinationID() const
 void WebFrame::setAppBadge(const WebCore::SecurityOriginData& origin, std::optional<uint64_t> badge)
 {
     send(Messages::WebFrameProxy::SetAppBadge(origin, badge));
+}
+
+std::optional<ResourceResponse> WebFrame::resourceResponseForURL(const URL& url) const
+{
+    RefPtr localFrame = dynamicDowncast<LocalFrame>(m_coreFrame.get());
+    if (!localFrame)
+        return std::nullopt;
+
+    RefPtr loader = localFrame->loader().documentLoader();
+    if (!loader)
+        return std::nullopt;
+
+    if (loader->url() == url)
+        return loader->response();
+
+    RefPtr resource = loader->subresource(url);
+    if (resource)
+        return resource->response();
+
+    return std::nullopt;
 }
 
 } // namespace WebKit

@@ -38,6 +38,7 @@
 
 #include "AudioSession.h"
 #include "DocumentInlines.h"
+#include "ExceptionCode.h"
 #include "JSDOMPromiseDeferred.h"
 #include "JSMediaStream.h"
 #include "JSOverconstrainedError.h"
@@ -54,6 +55,7 @@
 #include "Settings.h"
 #include "UserMediaController.h"
 #include "WindowEventLoop.h"
+#include <JavaScriptCore/ConsoleTypes.h>
 #include <algorithm>
 #include <wtf/Scope.h>
 

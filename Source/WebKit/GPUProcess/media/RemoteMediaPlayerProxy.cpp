@@ -58,6 +58,7 @@
 #include <WebCore/ResourceError.h>
 #include <WebCore/SecurityOrigin.h>
 #include <wtf/TZoneMallocInlines.h>
+#include <wtf/MemoryFootprint.h>
 
 #if ENABLE(ENCRYPTED_MEDIA)
 #include "RemoteCDMFactoryProxy.h"
@@ -202,10 +203,6 @@ void RemoteMediaPlayerProxy::loadMediaSource(URL&& url, const MediaPlayer::LoadO
         m_mediaSourceProxy = adoptRef(*new RemoteMediaSourceProxy(*manager, mediaSourceIdentifier, *this));
 
     RefPtr player = m_player;
-#if USE(AVFOUNDATION) && ENABLE(MEDIA_SOURCE)
-    if (auto preferences = sharedPreferencesForWebProcess())
-        player->setDecompressionSessionPreferences(preferences->mediaSourcePrefersDecompressionSession, preferences->mediaSourceCanFallbackToDecompressionSession);
-#endif
     player->load(url, options, *protectedMediaSourceProxy());
 
     if (reattached)
@@ -347,6 +344,8 @@ void RemoteMediaPlayerProxy::setRate(double rate)
 void RemoteMediaPlayerProxy::didLoadingProgress(CompletionHandler<void(bool)>&& completionHandler)
 {
     protectedPlayer()->didLoadingProgress(WTFMove(completionHandler));
+
+    protectedConnection()->send(Messages::MediaPlayerPrivateRemote::ReportGPUMemoryFootprint(WTF::memoryFootprint()), m_id);
 }
 
 void RemoteMediaPlayerProxy::setPresentationSize(const WebCore::IntSize& size)
@@ -1371,6 +1370,16 @@ void RemoteMediaPlayerProxy::setSoundStageSize(SoundStageSize size)
     m_soundStageSize = size;
 
     protectedPlayer()->soundStageSizeDidChange();
+}
+
+void RemoteMediaPlayerProxy::setHasMessageClientForTesting(bool hasClient)
+{
+    protectedPlayer()->setMessageClientForTesting(hasClient ? this : nullptr);
+}
+
+void RemoteMediaPlayerProxy::sendInternalMessage(const WebCore::MessageForTesting& message)
+{
+    protectedConnection()->send(Messages::MediaPlayerPrivateRemote::SendInternalMessage { message }, m_id);
 }
 
 } // namespace WebKit

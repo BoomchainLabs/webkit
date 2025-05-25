@@ -27,14 +27,20 @@
 
 #if PLATFORM(MAC)
 
+#import "AppKitSPI.h"
 #import "DeprecatedGlobalValues.h"
 #import "PlatformUtilities.h"
+#import "TestCocoa.h"
 #import "TestNavigationDelegate.h"
 #import "TestWKWebView.h"
 #import <WebKit/WKPreferencesPrivate.h>
 #import <WebKit/WKWebViewConfigurationPrivate.h>
 #import <WebKit/WKWebViewPrivate.h>
+#import <WebKit/WKWebViewPrivateForTesting.h>
 #import <wtf/RetainPtr.h>
+
+@interface WKWebView (ObscuredContentInsets) <NSScrollViewSeparatorTrackingAdapter>
+@end
 
 @interface FullscreenChangeMessageHandler : NSObject <WKScriptMessageHandler>
 @end
@@ -144,6 +150,35 @@ TEST(ObscuredContentInsets, SetAndGetObscuredContentInsets)
     EXPECT_TRUE(NSEdgeInsetsEqual([webView _obscuredContentInsets], finalInsets));
 }
 
+TEST(ObscuredContentInsets, ScrollViewFrameWithObscuredInsets)
+{
+    RetainPtr webView = adoptNS([[TestWKWebView alloc] initWithFrame:NSMakeRect(0, 0, 800, 600)]);
+    [webView _setAutomaticallyAdjustsContentInsets:NO];
+
+    [webView _setObscuredContentInsets:NSEdgeInsetsMake(100, 150, 30, 10) immediate:NO];
+    [webView synchronouslyLoadTestPageNamed:@"simple"];
+
+    EXPECT_EQ([webView scrollViewFrame], NSMakeRect(150, 0, 640, 600));
+}
+
+#if ENABLE(CONTENT_INSET_BACKGROUND_FILL)
+
+TEST(ObscuredContentInsets, ResizeContentInsetFillView)
+{
+    RetainPtr webView = adoptNS([[TestWKWebView alloc] initWithFrame:NSMakeRect(0, 0, 400, 600)]);
+    [webView _setAutomaticallyAdjustsContentInsets:NO];
+    [webView _setObscuredContentInsets:NSEdgeInsetsMake(100, 100, 0, 0) immediate:NO];
+    [webView synchronouslyLoadTestPageNamed:@"simple"];
+    [webView waitForNextPresentationUpdate];
+    EXPECT_EQ(NSMakeRect(0, 0, 400, 100), [webView _contentInsetFillViewForTesting].frame);
+
+    [webView setFrame:NSMakeRect(0, 0, 800, 600)];
+    [webView waitForNextVisibleContentRectUpdate];
+    [webView waitForNextPresentationUpdate];
+    EXPECT_EQ(NSMakeRect(0, 0, 800, 100), [webView _contentInsetFillViewForTesting].frame);
+}
+
+#endif // ENABLE(CONTENT_INSET_BACKGROUND_FILL)
 
 } // namespace TestWebKitAPI
 

@@ -51,7 +51,6 @@ platform/OrientationNotifier.h
 platform/ScrollAnimator.h
 platform/Scrollbar.h
 platform/ScrollbarsController.h
-platform/graphics/ComplexTextController.h
 platform/graphics/TextBoxIterator.h
 platform/graphics/ca/TileCoverageMap.h
 platform/ios/WebAVPlayerController.h
@@ -59,8 +58,6 @@ platform/mac/VideoPresentationInterfaceMac.mm
 platform/mac/WebPlaybackControlsManager.h
 platform/mock/DeviceOrientationClientMock.h
 rendering/BackgroundPainter.h
-rendering/BidiRun.h
-rendering/FlexibleBoxAlgorithm.h
 rendering/GlyphDisplayListCache.cpp
 rendering/GridMasonryLayout.h
 rendering/GridTrackSizingAlgorithm.h
@@ -120,6 +117,7 @@ style/InlineTextBoxStyle.cpp
 style/PseudoClassChangeInvalidation.h
 style/StyleAdjuster.h
 style/StyleBuilderState.h
+style/StyleExtractorState.h
 style/StyleRelations.h
 style/StyleResolver.cpp
 style/StyleResolver.h

@@ -48,7 +48,9 @@
 #include "LegacyRenderSVGShapeInlines.h"
 #include "LocalFrame.h"
 #include "LocalFrameView.h"
+#include "NativeImage.h"
 #include "Page.h"
+#include "PathOperation.h"
 #include "PlatformMouseEvent.h"
 #include "PseudoClassChangeInvalidation.h"
 #include "RenderAncestorIterator.h"
@@ -158,7 +160,6 @@ static bool shouldAllowAccessibilityRoleAsPointerCursorReplacement(const Element
     case AccessibilityRole::Button:
     case AccessibilityRole::Checkbox:
     case AccessibilityRole::Link:
-    case AccessibilityRole::WebCoreLink:
     case AccessibilityRole::ListBoxOption:
     case AccessibilityRole::MenuItem:
     case AccessibilityRole::MenuItemCheckbox:
@@ -254,6 +255,20 @@ static bool hasTransparentContainerStyle(const RenderStyle& style)
         // No visible borders or borders that do not create a complete box.
         && (!style.hasVisibleBorder()
             || !(style.borderTopWidth() && style.borderRightWidth() && style.borderBottomWidth() && style.borderLeftWidth()));
+}
+
+static bool canTweakShapeForStyle(const RenderStyle& style)
+{
+    if (!hasTransparentContainerStyle(style))
+        return false;
+
+    switch (style.usedAppearance()) {
+    case StyleAppearance::TextField:
+    case StyleAppearance::TextArea:
+        return false;
+    default:
+        return true;
+    }
 }
 
 static bool colorIsChallengingToHighlight(const Color& color)
@@ -623,7 +638,7 @@ std::optional<InteractionRegion> interactionRegionForRenderedRegion(RenderObject
 
     bool canTweakShape = !isPhoto
         && !clipPath
-        && hasTransparentContainerStyle(style);
+        && canTweakShapeForStyle(style);
 
     if (canTweakShape) {
         // We can safely tweak the bounds and radius without causing visual mismatch.

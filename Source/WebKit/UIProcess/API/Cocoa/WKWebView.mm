@@ -39,6 +39,7 @@
 #import "ContentAsStringIncludesChildFrames.h"
 #import "DefaultWebBrowserChecks.h"
 #import "DiagnosticLoggingClient.h"
+#import "EditingRange.h"
 #import "FindClient.h"
 #import "FullscreenClient.h"
 #import "GlobalFindInPageState.h"
@@ -357,12 +358,6 @@ static bool shouldAllowPictureInPictureMediaPlayback()
 {
     static bool shouldAllowPictureInPictureMediaPlayback = linkedOnOrAfterSDKWithBehavior(SDKAlignedBehavior::PictureInPictureMediaPlayback);
     return shouldAllowPictureInPictureMediaPlayback;
-}
-
-static bool shouldAllowSettingAnyXHRHeaderFromFileURLs()
-{
-    static bool shouldAllowSettingAnyXHRHeaderFromFileURLs = (WTF::IOSApplication::isCardiogram() || WTF::IOSApplication::isNike()) && !linkedOnOrAfterSDKWithBehavior(SDKAlignedBehavior::DisallowsSettingAnyXHRHeaderFromFileURLs);
-    return shouldAllowSettingAnyXHRHeaderFromFileURLs;
 }
 
 #endif // PLATFORM(IOS_FAMILY)
@@ -770,7 +765,6 @@ static void addBrowsingContextControllerMethodStubIfNeeded()
     preferences->setAllowsPictureInPictureMediaPlayback(!![_configuration allowsPictureInPictureMediaPlayback] && shouldAllowPictureInPictureMediaPlayback());
     preferences->setUserInterfaceDirectionPolicy(static_cast<uint32_t>(WebCore::UserInterfaceDirectionPolicy::Content));
     preferences->setSystemLayoutDirection(static_cast<uint32_t>(WebCore::TextDirection::LTR));
-    preferences->setAllowSettingAnyXHRHeaderFromFileURLs(shouldAllowSettingAnyXHRHeaderFromFileURLs());
     preferences->setShouldDecidePolicyBeforeLoadingQuickLookPreview(!![_configuration _shouldDecidePolicyBeforeLoadingQuickLookPreview]);
 #if USE(SYSTEM_PREVIEW)
     preferences->setSystemPreviewEnabled(!![_configuration _systemPreviewEnabled]);
@@ -1982,6 +1976,9 @@ inline OptionSet<WebKit::FindOptions> toFindOptions(WKFindConfiguration *configu
 
 #if ENABLE(CONTENT_INSET_BACKGROUND_FILL)
     [self _updateFixedColorExtensionViews];
+#if PLATFORM(MAC)
+    _impl->updateContentInsetFillViews();
+#endif
 #endif
 
     auto maximumViewportInsetSize = WebCore::FloatSize(maximumViewportInset.left + additionalInsets.left() + maximumViewportInset.right, maximumViewportInset.top + additionalInsets.top() + maximumViewportInset.bottom);
@@ -2173,7 +2170,7 @@ inline OptionSet<WebKit::FindOptions> toFindOptions(WKFindConfiguration *configu
 - (void)createWebArchiveDataWithCompletionHandler:(void (^)(NSData *, NSError *))completionHandler
 {
     THROW_IF_SUSPENDED;
-    _page->getWebArchiveOfFrame(nullptr, [completionHandler = makeBlockPtr(completionHandler)](API::Data* data) {
+    _page->getWebArchive([completionHandler = makeBlockPtr(completionHandler)](API::Data* data) {
         if (data)
             completionHandler(wrapper(data), nil);
         else
@@ -3047,6 +3044,7 @@ static WebCore::CocoaColor *sampledFixedPositionContentColor(const WebCore::Fixe
     RetainPtr oldTopColor = [self _sampledTopFixedPositionContentColor];
     RetainPtr newTopColor = sampledFixedPositionContentColor(edges, WebCore::BoxSide::Top);
     bool isTopColorChanging = oldTopColor != newTopColor || ![oldTopColor isEqual:newTopColor.get()];
+    bool isTopFixedEdgeChanging = isTopColorChanging || _fixedContainerEdges.hasFixedEdge(WebCore::BoxSide::Top) != edges.hasFixedEdge(WebCore::BoxSide::Top);
 
     if (isTopColorChanging)
         [self willChangeValueForKey:NSStringFromSelector(@selector(_sampledTopFixedPositionContentColor))];
@@ -3055,6 +3053,13 @@ static WebCore::CocoaColor *sampledFixedPositionContentColor(const WebCore::Fixe
 
 #if ENABLE(CONTENT_INSET_BACKGROUND_FILL)
     [self _updateFixedColorExtensionViews];
+#endif
+
+#if PLATFORM(MAC) && ENABLE(CONTENT_INSET_BACKGROUND_FILL)
+    if (isTopFixedEdgeChanging)
+        _impl->updateContentInsetFillViews();
+#else
+    UNUSED_VARIABLE(isTopFixedEdgeChanging);
 #endif
 
     if (isTopColorChanging)
@@ -3137,6 +3142,16 @@ static WebCore::CocoaColor *sampledFixedPositionContentColor(const WebCore::Fixe
         return;
 
     RetainPtr parentView = [self _containerForFixedColorExtension];
+    auto addColorExtensionView = [&](CocoaView *extensionView) {
+#if PLATFORM(MAC)
+        if (RetainPtr contentInsetFillView = _impl->topContentInsetFillView()) {
+            [parentView addSubview:extensionView positioned:NSWindowBelow relativeTo:contentInsetFillView.get()];
+            return;
+        }
+#endif
+        [parentView addSubview:extensionView];
+    };
+
     auto insets = [self _obscuredInsetsForFixedColorExtension];
     auto updateExtensionView = [&](WebCore::BoxSide side) {
         BOOL needsView = insets.at(side) > 0 && _fixedContainerEdges.hasFixedEdge(side);
@@ -3166,7 +3181,7 @@ static WebCore::CocoaColor *sampledFixedPositionContentColor(const WebCore::Fixe
                     return "";
                 }
             }()]).get();
-            [parentView addSubview:extensionView.get()];
+            addColorExtensionView(extensionView.get());
             _fixedColorExtensionViews.setAt(side, extensionView);
         }
 
@@ -3233,12 +3248,16 @@ static WebCore::CocoaColor *sampledFixedPositionContentColor(const WebCore::Fixe
 
 - (void)colorExtensionViewWillFadeOut:(WKColorExtensionView *)view
 {
+#if PLATFORM(IOS_FAMILY)
     [self _updateFixedColorExtensionEdges];
+#endif
 }
 
 - (void)colorExtensionViewDidFadeIn:(WKColorExtensionView *)view
 {
+#if PLATFORM(IOS_FAMILY)
     [self _updateFixedColorExtensionEdges];
+#endif
 }
 
 #endif // ENABLE(CONTENT_INSET_BACKGROUND_FILL)

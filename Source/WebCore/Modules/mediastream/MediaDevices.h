@@ -37,7 +37,6 @@
 #include "EventNames.h"
 #include "EventTarget.h"
 #include "EventTargetInterfaces.h"
-#include "ExceptionOr.h"
 #include "IDLTypes.h"
 #include "MediaTrackConstraints.h"
 #include "RealtimeMediaSourceCenter.h"
@@ -95,7 +94,7 @@ public:
     void enumerateDevices(EnumerateDevicesPromise&&);
     MediaTrackSupportedConstraints getSupportedConstraints();
 
-    String deviceIdToPersistentId(const String& deviceId) const { return m_audioOutputDeviceIdToPersistentId.get(deviceId); }
+    String deviceIdToPersistentId(const String&) const;
 
     void willStartMediaCapture(bool microphone, bool camera);
 
@@ -126,6 +125,9 @@ private:
         Display = 1 << 2,
     };
     bool computeUserGesturePriviledge(GestureAllowedRequest);
+
+    enum class UserActivation : bool { No, Yes };
+    void queueTaskForDeviceChangeEvent(UserActivation);
 
     RunLoop::Timer m_scheduledEventTimer;
     Markable<UserMediaClient::DeviceChangeObserverToken> m_deviceChangeToken;

@@ -94,7 +94,6 @@ static SDKAlignedBehaviors computeSDKAlignedBehaviors()
         disableBehavior(SDKAlignedBehavior::RequiresUserGestureToLoadVideo);
         disableBehavior(SDKAlignedBehavior::LinkPreviewEnabledByDefault);
         disableBehavior(SDKAlignedBehavior::ConvertsInvalidURLsToBlank);
-        disableBehavior(SDKAlignedBehavior::NoTheSecretSocietyHiddenMysteryWindowOpenQuirk);
         disableBehavior(SDKAlignedBehavior::UnprefixedPlaysInlineAttribute);
     }
 
@@ -114,7 +113,6 @@ static SDKAlignedBehaviors computeSDKAlignedBehaviors()
     }
 
     if (linkedBefore(dyld_spring_2018_os_versions, DYLD_IOS_VERSION_11_3, DYLD_MACOSX_VERSION_10_13_4)) {
-        disableBehavior(SDKAlignedBehavior::DisallowsSettingAnyXHRHeaderFromFileURLs);
         disableBehavior(SDKAlignedBehavior::DefaultsToPassiveTouchListenersOnDocument);
     }
 
@@ -128,7 +126,6 @@ static SDKAlignedBehaviors computeSDKAlignedBehaviors()
 
     if (linkedBefore(dyld_spring_2019_os_versions, DYLD_IOS_VERSION_12_2, DYLD_MACOSX_VERSION_10_14_4)) {
         disableBehavior(SDKAlignedBehavior::LazyGestureRecognizerInstallation);
-        disableBehavior(SDKAlignedBehavior::ProcessSwapOnCrossSiteNavigation);
     }
 
     if (linkedBefore(dyld_fall_2019_os_versions, DYLD_IOS_VERSION_13_0, DYLD_MACOSX_VERSION_10_15)) {
@@ -140,8 +137,6 @@ static SDKAlignedBehaviors computeSDKAlignedBehaviors()
         disableBehavior(SDKAlignedBehavior::ModernCompabilityModeByDefault);
         disableBehavior(SDKAlignedBehavior::HasUIContextMenuInteraction);
         disableBehavior(SDKAlignedBehavior::WKContentViewDoesNotOverrideKeyCommands);
-        disableBehavior(SDKAlignedBehavior::SupportsOverflowHiddenOnMainFrame);
-        disableBehavior(SDKAlignedBehavior::NoIMDbCSSOMViewScrollingQuirk);
         disableBehavior(SDKAlignedBehavior::DownloadDelegatesCalledOnTheMainThread);
     }
 
@@ -159,7 +154,6 @@ static SDKAlignedBehaviors computeSDKAlignedBehaviors()
         disableBehavior(SDKAlignedBehavior::InitializeWebKit2MainThreadAssertion);
         disableBehavior(SDKAlignedBehavior::WKWebsiteDataStoreInitReturningNil);
         disableBehavior(SDKAlignedBehavior::WebSQLDisabledByDefaultInLegacyWebKit);
-        disableBehavior(SDKAlignedBehavior::NoLaBanquePostaleQuirks);
         disableBehavior(SDKAlignedBehavior::NoPokerBrosBuiltInTagQuirk);
     }
 
@@ -212,7 +206,6 @@ static SDKAlignedBehaviors computeSDKAlignedBehaviors()
         disableBehavior(SDKAlignedBehavior::FullySuspendsBackgroundContent);
         disableBehavior(SDKAlignedBehavior::RunningBoardThrottling);
         disableBehavior(SDKAlignedBehavior::PopoverAttributeEnabled);
-        disableBehavior(SDKAlignedBehavior::LiveRangeSelectionEnabledForAllApps);
         disableBehavior(SDKAlignedBehavior::DoesNotOverrideUAFromNSUserDefault);
         disableBehavior(SDKAlignedBehavior::EvaluateJavaScriptWithoutTransientActivation);
         disableBehavior(SDKAlignedBehavior::ResettingTransitionCancelsRunningTransitionQuirk);
@@ -240,6 +233,9 @@ static SDKAlignedBehaviors computeSDKAlignedBehaviors()
         disableBehavior(SDKAlignedBehavior::BlockCrossOriginRedirectDownloads);
         disableBehavior(SDKAlignedBehavior::SupportGameControllerEventInteractionAPI);
     }
+
+    if (linkedBefore(dyld_2024_SU_F_os_versions, DYLD_IOS_VERSION_18_5, DYLD_MACOSX_VERSION_15_5))
+        disableBehavior(SDKAlignedBehavior::NavigationActionSourceFrameNonNull);
 
     disableAdditionalSDKAlignedBehaviors(behaviors);
 
@@ -480,18 +476,6 @@ bool IOSApplication::isSafariViewService()
     return isSafariViewService;
 }
 
-bool IOSApplication::isIMDb()
-{
-    static bool isIMDb = applicationBundleIsEqualTo("com.imdb.imdb"_s);
-    return isIMDb;
-}
-
-bool IOSApplication::isGmail()
-{
-    static bool isGmail = applicationBundleIsEqualTo("com.google.Gmail"_s);
-    return isGmail;
-}
-
 bool IOSApplication::isWebBookmarksD()
 {
     static bool isWebBookmarksD = applicationBundleIsEqualTo("com.apple.webbookmarksd"_s);
@@ -512,12 +496,6 @@ bool IOSApplication::isMobileStore()
     return isMobileStore;
 }
 
-bool IOSApplication::isSpringBoard()
-{
-    static bool isSpringBoard = applicationBundleIsEqualTo("com.apple.springboard"_s);
-    return isSpringBoard;
-}
-
 // FIXME: this needs to be changed when the WebProcess is changed to an XPC service.
 bool IOSApplication::isWebProcess()
 {
@@ -536,34 +514,10 @@ bool IOSApplication::isIBooksStorytime()
     return isIBooksStorytime;
 }
 
-bool IOSApplication::isTheSecretSocietyHiddenMystery()
-{
-    static bool isTheSecretSocietyHiddenMystery = applicationBundleIsEqualTo("com.g5e.secretsociety"_s);
-    return isTheSecretSocietyHiddenMystery;
-}
-
-bool IOSApplication::isCardiogram()
-{
-    static bool isCardiogram = applicationBundleIsEqualTo("com.cardiogram.ios.heart"_s);
-    return isCardiogram;
-}
-
-bool IOSApplication::isNike()
-{
-    static bool isNike = applicationBundleIsEqualTo("com.nike.omega"_s);
-    return isNike;
-}
-
 bool IOSApplication::isMoviStarPlus()
 {
     static bool isMoviStarPlus = applicationBundleIsEqualTo("com.prisatv.yomvi"_s);
     return isMoviStarPlus;
-}
-
-bool IOSApplication::isFirefox()
-{
-    static bool isFirefox = applicationBundleIsEqualTo("org.mozilla.ios.Firefox"_s);
-    return isFirefox;
 }
 
 bool IOSApplication::isHoYoLAB()
@@ -582,12 +536,6 @@ bool IOSApplication::isEvernote()
 {
     static bool isEvernote = applicationBundleIsEqualTo("com.evernote.iPhone.Evernote"_s);
     return isEvernote;
-}
-
-bool IOSApplication::isEventbrite()
-{
-    static bool isEventbrite = applicationBundleIsEqualTo("com.eventbrite.attendee"_s);
-    return isEventbrite;
 }
 
 bool IOSApplication::isDataActivation()
@@ -630,12 +578,6 @@ bool IOSApplication::isEssentialSkeleton()
 {
     static bool isEssentialSkeleton = applicationBundleIsEqualTo("com.3d4medical.EssentialSkeleton"_s);
     return isEssentialSkeleton;
-}
-
-bool IOSApplication::isLaBanquePostale()
-{
-    static bool isLaBanquePostale = applicationBundleIsEqualTo("fr.labanquepostale.moncompte"_s);
-    return isLaBanquePostale;
 }
 
 bool IOSApplication::isESPNFantasySports()

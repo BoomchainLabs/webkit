@@ -40,13 +40,19 @@ namespace WebCore {
 bool AXCoreObject::isLink() const
 {
     auto role = roleValue();
-    return role == AccessibilityRole::Link || role == AccessibilityRole::WebCoreLink;
+    return role == AccessibilityRole::Link;
 }
 
 bool AXCoreObject::isList() const
 {
     auto role = roleValue();
     return role == AccessibilityRole::List || role == AccessibilityRole::DescriptionList;
+}
+
+bool AXCoreObject::isFileUploadButton() const
+{
+    std::optional type = inputType();
+    return type ? *type == InputType::Type::File : false;
 }
 
 bool AXCoreObject::isMenuRelated() const
@@ -73,6 +79,15 @@ bool AXCoreObject::isMenuItem() const
     default:
         return false;
     }
+}
+
+bool AXCoreObject::isInputImage() const
+{
+    if (roleValue() != AccessibilityRole::Button)
+        return false;
+
+    std::optional type = inputType();
+    return type ?  *type == InputType::Type::Image : false;
 }
 
 bool AXCoreObject::isControl() const
@@ -129,7 +144,6 @@ bool AXCoreObject::isImplicitlyInteractive() const
     case AccessibilityRole::TextArea:
     case AccessibilityRole::TextField:
     case AccessibilityRole::ToggleButton:
-    case AccessibilityRole::WebCoreLink:
         return true;
     default:
         return false;
@@ -139,6 +153,7 @@ bool AXCoreObject::isImplicitlyInteractive() const
 bool AXCoreObject::isLandmark() const
 {
     switch (roleValue()) {
+    case AccessibilityRole::Form:
     case AccessibilityRole::LandmarkBanner:
     case AccessibilityRole::LandmarkComplementary:
     case AccessibilityRole::LandmarkContentInfo:
@@ -309,6 +324,22 @@ AXCoreObject* AXCoreObject::firstUnignoredChild()
 }
 #endif // ENABLE(INCLUDE_IGNORED_IN_CORE_AX_TREE)
 
+#ifndef NDEBUG
+void AXCoreObject::verifyChildrenIndexInParent(const AccessibilityChildrenVector& children) const
+{
+    if (!shouldSetChildIndexInParent()) {
+        // Due to known irregularities in how the accessibility tree is built, we don't want to
+        // do this verification for some types of objects, as it will always fail. At the time this
+        // was written, this is specifically table columns and table header containers, which insert
+        // cells as their children despite not being their "true" parent.
+        return;
+    }
+
+    for (unsigned i = 0; i < children.size(); i++)
+        ASSERT(children[i]->indexInParent() == i);
+}
+#endif
+
 AXCoreObject* AXCoreObject::nextInPreOrder(bool updateChildrenIfNeeded, AXCoreObject* stayWithin)
 {
     const auto& children = childrenIncludingIgnored(updateChildrenIfNeeded);
@@ -364,6 +395,20 @@ AXCoreObject* AXCoreObject::deepestLastChildIncludingIgnored(bool updateChildren
     return deepestChild.ptr();
 }
 
+size_t AXCoreObject::indexInSiblings(const AccessibilityChildrenVector& siblings) const
+{
+    unsigned indexOfThis = indexInParent();
+    if (indexOfThis >= siblings.size() || siblings[indexOfThis]->objectID() != objectID()) [[unlikely]] {
+        // If this happens, the accessibility tree is an incorrect state.
+        ASSERT_NOT_REACHED();
+
+        return siblings.findIf([this] (const Ref<AXCoreObject>& object) {
+            return object.ptr() == this;
+        });
+    }
+    return indexOfThis;
+}
+
 AXCoreObject* AXCoreObject::nextSiblingIncludingIgnored(bool updateChildrenIfNeeded) const
 {
     RefPtr parent = parentObject();
@@ -371,9 +416,7 @@ AXCoreObject* AXCoreObject::nextSiblingIncludingIgnored(bool updateChildrenIfNee
         return nullptr;
 
     const auto& siblings = parent->childrenIncludingIgnored(updateChildrenIfNeeded);
-    size_t indexOfThis = siblings.findIf([this] (const Ref<AXCoreObject>& object) {
-        return object.ptr() == this;
-    });
+    size_t indexOfThis = indexInSiblings(siblings);
     if (indexOfThis == notFound)
         return nullptr;
 
@@ -387,9 +430,7 @@ AXCoreObject* AXCoreObject::previousSiblingIncludingIgnored(bool updateChildrenI
         return nullptr;
 
     const auto& siblings = parent->childrenIncludingIgnored(updateChildrenIfNeeded);
-    size_t indexOfThis = siblings.findIf([this] (const Ref<AXCoreObject>& object) {
-        return object.ptr() == this;
-    });
+    size_t indexOfThis = indexInSiblings(siblings);
     if (indexOfThis == notFound)
         return nullptr;
 
@@ -759,6 +800,18 @@ bool AXCoreObject::isActiveDescendantOfFocusedContainer() const
     return false;
 }
 
+// ARIA spec: User agents must not expose the aria-roledescription property if the element to which aria-roledescription is applied does not have a valid WAI-ARIA role or does not have an implicit WAI-ARIA role semantic.
+bool AXCoreObject::supportsARIARoleDescription() const
+{
+    switch (roleValue()) {
+    case AccessibilityRole::Generic:
+    case AccessibilityRole::Unknown:
+        return false;
+    default:
+        return true;
+    }
+}
+
 bool AXCoreObject::supportsRangeValue() const
 {
     return isProgressIndicator()
@@ -803,6 +856,12 @@ bool AXCoreObject::isRootWebArea() const
     RefPtr parent = parentObject();
     // If the parent is a scroll area, and the scroll area has no parent, we are at the root web area.
     return parent && parent->roleValue() == AccessibilityRole::ScrollArea && !parent->parentObject();
+}
+
+bool AXCoreObject::isRadioInput() const
+{
+    std::optional type = inputType();
+    return type ? *type == InputType::Type::Radio : false;
 }
 
 String AXCoreObject::popupValue() const
@@ -903,6 +962,32 @@ AXCoreObject* AXCoreObject::columnHeader()
     for (const auto& cell : unignoredChildren()) {
         if (cell->isColumnHeader())
             return cell.ptr();
+    }
+    return nullptr;
+}
+
+AXCoreObject* AXCoreObject::rowHeader()
+{
+    const auto& rowChildren = unignoredChildren();
+    if (rowChildren.isEmpty())
+        return nullptr;
+
+    bool isARIAGridRow = this->isARIAGridRow();
+
+    Ref firstCell = rowChildren[0].get();
+    if (!isARIAGridRow && !firstCell->hasElementName(ElementName::HTML_th))
+        return nullptr;
+
+    // Verify that the row header is not part of an entire row of headers.
+    // In that case, it is unlikely this is a row header (for non-grid rows).
+    for (const auto& child : rowChildren) {
+        // We found a non-header cell, so this is not an entire row of headers -- return the original header cell.
+        if (!isARIAGridRow && !child->hasElementName(ElementName::HTML_th))
+            return firstCell.ptr();
+
+        // For grid rows, the first header encountered is the row header.
+        if (isARIAGridRow && child->isRowHeader())
+            return child.ptr();
     }
     return nullptr;
 }
@@ -1008,9 +1093,36 @@ bool AXCoreObject::containsOnlyStaticText() const
     return hasText && !nonTextDescendant;
 }
 
+String AXCoreObject::roleDescription()
+{
+    if (hasAttachmentTag())
+        return AXAttachmentRoleText();
+
+    // aria-roledescription takes precedence over any other rule.
+    if (supportsARIARoleDescription()) {
+        auto roleDescription = ariaRoleDescription();
+        if (!roleDescription.isEmpty())
+            return roleDescription;
+    }
+
+    auto roleDescription = rolePlatformDescription();
+    if (!roleDescription.isEmpty())
+        return roleDescription;
+
+    if (roleValue() == AccessibilityRole::Figure)
+        return AXFigureText();
+
+    if (roleValue() == AccessibilityRole::Suggestion)
+        return AXSuggestionRoleDescriptionText();
+
+    return { };
+}
+
 String AXCoreObject::ariaLandmarkRoleDescription() const
 {
     switch (roleValue()) {
+    case AccessibilityRole::Form:
+        return AXARIAContentGroupText("ARIALandmarkForm"_s);
     case AccessibilityRole::LandmarkBanner:
         return AXARIAContentGroupText("ARIALandmarkBanner"_s);
     case AccessibilityRole::LandmarkComplementary:
@@ -1066,6 +1178,54 @@ unsigned AXCoreObject::blockquoteLevel() const
         if (ancestor->roleValue() == AccessibilityRole::Blockquote)
             ++level;
     }
+    return level;
+}
+
+unsigned AXCoreObject::headingLevel() const
+{
+    if (isHeading()) {
+        unsigned level = ariaLevel();
+        if (level > 0)
+            return level;
+    }
+
+    auto elementName = this->elementName();
+    if (elementName == ElementName::HTML_h1)
+        return 1;
+    if (elementName == ElementName::HTML_h2)
+        return 2;
+    if (elementName == ElementName::HTML_h3)
+        return 3;
+    if (elementName == ElementName::HTML_h4)
+        return 4;
+    if (elementName == ElementName::HTML_h5)
+        return 5;
+    if (elementName == ElementName::HTML_h6)
+        return 6;
+    return 0;
+}
+
+unsigned AXCoreObject::hierarchicalLevel() const
+{
+    unsigned level = ariaLevel();
+    if (level > 0)
+        return level;
+
+    // Only tree item will calculate its level through the DOM currently.
+    if (roleValue() != AccessibilityRole::TreeItem)
+        return 0;
+
+    // Hierarchy leveling starts at 1, to match the aria-level spec.
+    // We measure tree hierarchy by the number of groups that the item is within.
+    level = 1;
+    for (RefPtr ancestor = parentObject(); ancestor; ancestor = ancestor->parentObject()) {
+        auto ancestorRole = ancestor->roleValue();
+        if (ancestorRole == AccessibilityRole::Group)
+            level++;
+        else if (ancestorRole == AccessibilityRole::Tree)
+            break;
+    }
+
     return level;
 }
 
@@ -1389,6 +1549,101 @@ AXCoreObject* AXCoreObject::parentObjectUnignored() const
     return Accessibility::findAncestor<AXCoreObject>(*this, false, [&] (const AXCoreObject& object) {
         return !object.isIgnored();
     });
+}
+
+// This function implements a fast way to determine our ordering relative to |other|: find the
+// ancestor we share, then compare the index-in-parent of the next lowest descendant of each us
+// and |other|. Take this example:
+/*
+     A
+    / \
+   B   C
+  /   / \
+ D   E   F
+          \
+           G
+*/
+// (A has two children, B and C. B has child D. C has children E and F. F has child G.)
+//
+// Imagine we want to determine the ordering of D relative to G. They share ancestor A. D's descends from B
+// who is index 0 in shared ancestor A. G descends from C, who is index 1 in the shared ancestor. This lets
+// us know B (who has ancestor index 0) comes before G (who has ancestor index 1).
+//
+// This is significantly more performant than simply doing a pre-order traversal from |this| to |other|.
+// On html.spec.whatwg.org, 1800 runs of this method took 4.4ms total, while 1800 runs of a pre-order
+// traversal to determine ordering took 48.6 seconds total. This algorithm is also faster on more "average",
+// smaller-accessibility-tree pages:
+//   - YouTube: 0.45ms vs 18.2ms in 237 comparisons
+//   - Wikipedia: 3.8ms vs. 18.7ms in 270 comparisons
+std::partial_ordering AXCoreObject::partialOrder(const AXCoreObject& other)
+{
+    if (objectID() == other.objectID())
+        return std::partial_ordering::equivalent;
+
+    RefPtr current = this;
+    RefPtr otherCurrent = &other;
+
+    auto orderingFromIndices = [&] (unsigned ourAncestorIndex, unsigned otherAncestorIndex) {
+        if (ourAncestorIndex < otherAncestorIndex)
+            return std::partial_ordering::less;
+        if (ourAncestorIndex > otherAncestorIndex)
+            return std::partial_ordering::greater;
+
+        ASSERT_NOT_REACHED();
+        return std::partial_ordering::equivalent;
+    };
+
+    // ListHashSet chosen intentionally because it has O(1) lookup time. This is important
+    // because we need to repeatedly query these lists, once every time we find a new ancestor.
+    ListHashSet<Ref<AXCoreObject>> ourAncestors;
+    ListHashSet<Ref<AXCoreObject>> otherAncestors;
+    while (current || otherCurrent) {
+        if (RefPtr maybeParent = current ? current->parentObject() : nullptr) {
+            if (maybeParent == &other) {
+                // We are a descendant of the other object, so we come after it.
+                return std::partial_ordering::greater;
+            }
+
+            Ref parent = maybeParent.releaseNonNull();
+            if (auto iterator = otherAncestors.find(parent); iterator != otherAncestors.end()) {
+                // If ourAncestors is empty (it has zero size), that means the shared ancestor is |current|'s
+                // parent, and thus the index to use is |current| position in the shared parent's children.
+                unsigned ourAncestorIndex = ourAncestors.size() ? ourAncestors.takeLast()->indexInParent() : current->indexInParent();
+                --iterator;
+                // Similarly, it's possible the shared ancestor was the direct parent of |otherCurrent| —
+                // determine this by checking whether iterator == otherAncestors.end() after moving back one
+                // element.
+                unsigned otherAncestorIndex = iterator != otherAncestors.end() ? (*iterator)->indexInParent() : other.indexInParent();
+
+                return orderingFromIndices(ourAncestorIndex, otherAncestorIndex);
+            }
+            current = parent.ptr();
+            ASSERT(!ourAncestors.contains(parent));
+            ourAncestors.appendOrMoveToLast(WTFMove(parent));
+        }
+
+        if (RefPtr maybeParent = otherCurrent ? otherCurrent->parentObject() : nullptr) {
+            if (maybeParent == this) {
+                // The other object is a descendant of ours, so we come before it in tree-order.
+                return std::partial_ordering::less;
+            }
+
+            Ref parent = maybeParent.releaseNonNull();
+            if (auto iterator = ourAncestors.find(parent); iterator != ourAncestors.end()) {
+                unsigned otherAncestorIndex = otherAncestors.size() ? otherAncestors.takeLast()->indexInParent() : otherCurrent->indexInParent();
+                --iterator;
+                unsigned ourAncestorIndex = iterator != ourAncestors.end() ? (*iterator)->indexInParent() : indexInParent();
+
+                return orderingFromIndices(ourAncestorIndex, otherAncestorIndex);
+            }
+            otherCurrent = parent.ptr();
+            ASSERT(!otherAncestors.contains(parent));
+            otherAncestors.appendOrMoveToLast(WTFMove(parent));
+        }
+    }
+
+    ASSERT_NOT_REACHED();
+    return std::partial_ordering::unordered;
 }
 
 // LineDecorationStyle implementations.

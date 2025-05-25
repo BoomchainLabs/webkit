@@ -163,6 +163,8 @@ public:
     const AnchorPositionedToAnchorMap& anchorPositionedToAnchorMap() const { return m_anchorPositionedToAnchorMap; }
     void updateAnchorPositioningStateAfterStyleResolution();
 
+    bool invalidateForAnchorDependencies(LayoutDependencyUpdateContext&);
+
 private:
     Scope& documentScope();
     bool isForUserAgentShadowTree() const;
@@ -199,7 +201,7 @@ private:
     StyleSheetChange analyzeStyleSheetChange(const Vector<RefPtr<CSSStyleSheet>>& newStylesheets);
     void invalidateStyleAfterStyleSheetChange(const StyleSheetChange&);
 
-    void updateResolver(Vector<RefPtr<CSSStyleSheet>>&, ResolverUpdateType);
+    void updateResolver(std::span<const RefPtr<CSSStyleSheet>>, ResolverUpdateType);
     void createDocumentResolver();
     void createOrFindSharedShadowTreeResolver();
     void unshareShadowTreeResolverBeforeMutation();
@@ -216,7 +218,6 @@ private:
     static MediaQueryViewportState mediaQueryViewportStateForDocument(const Document&);
 
     bool invalidateForContainerDependencies(LayoutDependencyUpdateContext&);
-    bool invalidateForAnchorDependencies(LayoutDependencyUpdateContext&);
     bool invalidateForPositionTryFallbacks(LayoutDependencyUpdateContext&);
 
     CheckedRef<Document> m_document;

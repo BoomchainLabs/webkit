@@ -38,7 +38,6 @@ list(APPEND PAL_PUBLIC_HEADERS
     mac/LookupSoftLink.h
     mac/QuickLookUISoftLink.h
 
-    spi/cf/CFLocaleSPI.h
     spi/cf/CFNetworkConnectionCacheSPI.h
     spi/cf/CFNetworkSPI.h
     spi/cf/CFNotificationCenterSPI.h
@@ -61,7 +60,6 @@ list(APPEND PAL_PUBLIC_HEADERS
     spi/cocoa/AppSSOSPI.h
     spi/cocoa/AuthKitSPI.h
     spi/cocoa/AudioToolboxSPI.h
-    spi/cocoa/CFNSURLConnectionSPI.h
     spi/cocoa/CommonCryptoSPI.h
     spi/cocoa/CoreMaterialSPI.h
     spi/cocoa/CoreServicesSPI.h

@@ -107,6 +107,7 @@
 #import <WebCore/HTMLNames.h>
 #import <WebCore/HitTestResult.h>
 #import <WebCore/Image.h>
+#import <WebCore/ImageAdapter.h>
 #import <WebCore/KeyboardEvent.h>
 #import <WebCore/LegacyNSPasteboardTypes.h>
 #import <WebCore/LegacyWebArchive.h>
@@ -3338,7 +3339,7 @@ IGNORE_WARNINGS_END
                 pageSize = WebCore::FloatSize(minPageLogicalHeight, minPageLogicalWidth);
                 originalPageSize = WebCore::FloatSize(originalPageHeight, originalPageWidth);
             }
-            coreView->forceLayoutForPagination(pageSize, originalPageSize, maximumShrinkRatio, adjustViewSize ? WebCore::AdjustViewSize : WebCore::DoNotAdjustViewSize);
+            coreView->forceLayoutForPagination(pageSize, originalPageSize, maximumShrinkRatio, adjustViewSize ? WebCore::AdjustViewSize::Yes : WebCore::AdjustViewSize::No);
         } else {
             coreView->forceLayout(!adjustViewSize);
             if (adjustViewSize)

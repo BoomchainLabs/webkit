@@ -9,6 +9,7 @@ flags:
   json-parse-with-source: useJSONSourceTextAccess
   iterator-sequencing: useIteratorSequencing
   explicit-resource-management: useExplicitResourceManagement
+  upsert: useMapGetOrInsert
 skip:
   features:
     - callable-boundary-realms
@@ -47,9 +48,8 @@ skip:
     - test/staging/sm/Temporal
     # Explicit Resource Management
     - test/staging/explicit-resource-management
-    - test/built-ins/DisposableStack
+    - test/built-ins/DisposableStack/prototype
     - test/built-ins/AsyncDisposableStack
-    - test/built-ins/NativeErrors/SuppressedError
     - test/language/statements/using
     - test/language/statements/await-using
   files:

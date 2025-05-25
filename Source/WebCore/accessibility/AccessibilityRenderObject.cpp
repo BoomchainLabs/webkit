@@ -37,6 +37,7 @@
 #include "AccessibilitySpinButton.h"
 #include "AccessibilityTable.h"
 #include "CachedImage.h"
+#include "ComplexTextController.h"
 #include "ComposedTreeIterator.h"
 #include "DocumentSVG.h"
 #include "Editing.h"
@@ -46,6 +47,7 @@
 #include "EventTargetInlines.h"
 #include "FloatRect.h"
 #include "FocusOptions.h"
+#include "FontCascade.h"
 #include "FrameLoader.h"
 #include "FrameSelection.h"
 #include "HTMLAreaElement.h"
@@ -120,6 +122,7 @@
 #include "TextIterator.h"
 #include "TypedElementDescendantIteratorInlines.h"
 #include "VisibleUnits.h"
+#include "WidthIterator.h"
 #include <algorithm>
 #include <ranges>
 #include <wtf/NeverDestroyed.h>
@@ -1345,11 +1348,12 @@ bool AccessibilityRenderObject::computeIsIgnored() const
     // objects are often containers with meaningful information, the inclusion of a span can have
     // the side effect of causing the immediate parent accessible to be ignored. This is especially
     // problematic for platforms which have distinct roles for textual block elements.
-    if (node && node->hasTagName(spanTag))
+    auto elementName = WebCore::elementName(node);
+    if (elementName == ElementName::HTML_span)
         return true;
 
     // Other non-ignored host language elements
-    if (node && node->hasTagName(dfnTag))
+    if (elementName == ElementName::HTML_dfn)
         return false;
     
     if (isStyleFormatGroup())
@@ -1498,16 +1502,38 @@ AXTextRuns AccessibilityRenderObject::textRuns()
             distanceFromBoundsInDirection = isHorizontal ? lineBox->contentLogicalLeft() + containingBlockOffset - elementRect().x() : -textRun.xPos() + containingBlockOffset - elementRect().y();
         }
 
-        auto appendCharacterWidth = [&] (unsigned characterIndex) {
-            float characterWidth = textBox->fontCascade().widthForCharacterInRun(textRun, characterIndex);
+        // Populate GlyphBuffer with all of the glyphs for the text runs, enabling us to measure character widths.
+        const FontCascade& fontCascade = textBox->fontCascade();
+        GlyphBuffer glyphBuffer;
+        if (fontCascade.codePath(textRun) == FontCascade::CodePath::Complex) {
+            ComplexTextController complexTextController(fontCascade, textRun, true, nil);
+            complexTextController.advance(text.length(), &glyphBuffer);
+        } else {
+            WidthIterator simpleIterator(fontCascade, textRun);
+            simpleIterator.advance(text.length(), glyphBuffer);
+        }
+
+        // Iterate over the glyphs and populate characterWidths. Sometimes multiple characters correspond to just
+        // a single glyph so we might need to insert extras zeros into characterWidths for those indexes that
+        // don't correspond to a glyph.
+        characterWidths.reserveCapacity(text.length());
+        unsigned characterIndex = 0;
+        for (unsigned glyphIndex = 0; glyphIndex < glyphBuffer.size() && characterIndex < text.length(); glyphIndex++) {
+            unsigned newCharacterIndex = glyphBuffer.uncheckedStringOffsetAt(glyphIndex);
+            float characterWidth = WebCore::width(glyphBuffer.advanceAt(glyphIndex));
+            while (characterIndex + 1 < newCharacterIndex && characterIndex < text.length()) {
+                characterWidths.append(0);
+                characterIndex++;
+            }
+
+            // Round to integer widths, using the fractional part of accumulatedDistanceFromStart to avoid accumulating rounding errors.
             characterWidths.append(static_cast<uint16_t>(characterWidth + fmod(accumulatedDistanceFromStart, 1)));
             accumulatedDistanceFromStart += characterWidth;
-        };
+            characterIndex = newCharacterIndex;
+        }
 
         if (!collapseTabs && !collapseNewlines) {
             lineString.append(text);
-            for (unsigned i = 0; i < text.length(); i++)
-                appendCharacterWidth(i);
             return;
         }
 
@@ -1520,8 +1546,6 @@ AXTextRuns AccessibilityRenderObject::textRuns()
                 lineString.append(' ');
             else
                 lineString.append(character);
-
-            appendCharacterWidth(i);
         }
     };
 
@@ -1535,41 +1559,45 @@ AXTextRuns AccessibilityRenderObject::textRuns()
     // FIXME: Use InlineIteratorLogicalOrderTraversal instead. Otherwise we'll do the wrong thing for mixed direction content.
     auto textBox = InlineIterator::lineLeftmostTextBoxFor(*renderText);
     size_t currentLineIndex = textBox ? textBox->lineIndex() : 0;
-    for (; textBox; textBox.traverseNextTextBox()) {
+
+    bool containsOnlyASCII = true;
+    while (textBox) {
         size_t newLineIndex = textBox->lineIndex();
+        uint16_t startDOMOffset = domOffset(textBox->minimumCaretOffset());
+        uint16_t endDOMOffset = domOffset(textBox->maximumCaretOffset());
         if (newLineIndex != currentLineIndex) {
-            // FIXME: Currently, this is only ever called to ship text runs off to the accessibility thread. But maybe we should we make the isolatedCopy()s in this function optional based on a parameter?
-            runs.append({ currentLineIndex, lineString.toString().isolatedCopy(), { std::exchange(textRunDomOffsets, { }) }, std::exchange(characterWidths, { }), lineHeight, distanceFromBoundsInDirection });
+            auto string = lineString.toString().isolatedCopy();
+            if (containsOnlyASCII)
+                containsOnlyASCII = string.containsOnlyASCII();
+
+            if (textRunDomOffsets.size() && startDOMOffset != textRunDomOffsets.last()[1]) {
+                // If a space was trimmed in this text run (i.e., there's a gap between the end
+                // of the current run's DOM offset and the start of the next), add it back.
+                string = makeString(string, ' ');
+                characterWidths.append(0);
+            }
+            runs.append({ currentLineIndex, WTFMove(string), { std::exchange(textRunDomOffsets, { }) }, std::exchange(characterWidths, { }), lineHeight, distanceFromBoundsInDirection });
+
+            currentLineIndex = newLineIndex;
+            // Reset variables used in appendToLineString().
             lineString.clear();
             accumulatedDistanceFromStart = 0.0;
             lineHeight = 0.0;
             distanceFromBoundsInDirection = 0.0;
         }
-        currentLineIndex = newLineIndex;
+        appendToLineString(textBox);
 
         // Within each iteration of this loop, we are looking at the *next* text box to compare to the current.
         // So, we need to set the textRunDomOffsets after the line index comparison, in order to assign the right DOM offsets per text box.
-        textRunDomOffsets.append({ domOffset(textBox->minimumCaretOffset()), domOffset(textBox->maximumCaretOffset()) });
-        appendToLineString(textBox);
+        textBox.traverseNextTextBox();
+        textRunDomOffsets.append({ startDOMOffset, endDOMOffset });
     }
 
-    if (!lineString.isEmpty())
-        runs.append({ currentLineIndex, lineString.toString().isolatedCopy(), WTFMove(textRunDomOffsets), std::exchange(characterWidths, { }), lineHeight, distanceFromBoundsInDirection });
-
-    bool containsOnlyASCII = true;
-    for (size_t i = 0; i < runs.size(); i++) {
-        if (containsOnlyASCII && !runs[i].text.containsOnlyASCII())
-            containsOnlyASCII = false;
-
-        // If a space was trimmed in this text run (i.e., there's a gap between the end of the current run's DOM offset and the start of the next), add it back.
-        if (i != runs.size() - 1 && runs[i + 1].domOffsets().size()) {
-            uint16_t currentDOMEnd = runs[i].domOffsets().last()[1];
-            uint16_t nextDOMStart = runs[i + 1].domOffsets().first()[0];
-            if (currentDOMEnd != nextDOMStart) {
-                runs[i].text = makeString(runs[i].text, ' ');
-                runs[i].characterAdvances.append(0);
-            }
-        }
+    if (!lineString.isEmpty()) {
+        auto string = lineString.toString().isolatedCopy();
+        if (containsOnlyASCII)
+            containsOnlyASCII = string.containsOnlyASCII();
+        runs.append({ currentLineIndex, WTFMove(string), WTFMove(textRunDomOffsets), std::exchange(characterWidths, { }), lineHeight, distanceFromBoundsInDirection });
     }
     return { renderText->containingBlock(), WTFMove(runs), containsOnlyASCII };
 }
@@ -1818,7 +1846,7 @@ RefPtr<Element> AccessibilityRenderObject::rootEditableElementForPosition(const 
     for (RefPtr ancestor = position.anchorElementAncestor(); ancestor && ancestor != rootEditableElement; ancestor = ancestor->parentElement()) {
         if (elementIsTextControl(*ancestor))
             result = ancestor;
-        if (ancestor->hasTagName(bodyTag))
+        if (ancestor->elementName() == ElementName::HTML_body)
             break;
     }
     return result ? result : rootEditableElement;
@@ -2166,7 +2194,8 @@ AccessibilityObject* AccessibilityRenderObject::observableObject() const
 String AccessibilityRenderObject::expandedTextValue() const
 {
     if (AccessibilityObject* parent = parentObject()) {
-        if (parent->hasTagName(abbrTag) || parent->hasTagName(acronymTag))
+        auto parentName = parent->elementName();
+        if (parentName == ElementName::HTML_abbr || parentName == ElementName::HTML_acronym)
             return parent->getAttribute(titleAttr);
     }
 
@@ -2176,8 +2205,10 @@ String AccessibilityRenderObject::expandedTextValue() const
 bool AccessibilityRenderObject::supportsExpandedTextValue() const
 {
     if (roleValue() == AccessibilityRole::StaticText) {
-        if (AccessibilityObject* parent = parentObject())
-            return parent->hasTagName(abbrTag) || parent->hasTagName(acronymTag);
+        if (AccessibilityObject* parent = parentObject()) {
+            auto parentName = parent->elementName();
+            return parentName == ElementName::HTML_abbr || parentName == ElementName::HTML_acronym;
+        }
     }
     
     return false;
@@ -2474,7 +2505,7 @@ void AccessibilityRenderObject::addCanvasChildren()
 {
     // Add the unrendered canvas children as AX nodes, unless we're not using a canvas renderer
     // because JS is disabled for example.
-    if (!node() || !node()->hasTagName(canvasTag) || (renderer() && !renderer()->isRenderHTMLCanvas()))
+    if (elementName() != ElementName::HTML_canvas || (renderer() && !renderer()->isRenderHTMLCanvas()))
         return;
 
     // If it's a canvas, it won't have rendered children, but it might have accessible fallback content.
@@ -2580,12 +2611,6 @@ RenderObject* AccessibilityRenderObject::markerRenderer() const
     return renderListItem->markerRenderer();
 }
 
-void AccessibilityRenderObject::addListItemMarker()
-{
-    if (auto* marker = markerRenderer())
-        insertChild(axObjectCache()->getOrCreate(*marker), 0);
-}
-
 void AccessibilityRenderObject::updateRoleAfterChildrenCreation()
 {
     // If a menu does not have valid menuitem children, it should not be exposed as a menu.
@@ -2647,13 +2672,18 @@ void AccessibilityRenderObject::addChildren()
         addChild(object);
     };
 
+    WeakPtr cache = axObjectCache();
+    auto addListItemMarker = [&] () {
+        if (CheckedPtr marker = markerRenderer(); marker && cache)
+            addChild(cache->getOrCreate(*marker));
+    };
+
 #if !USE(ATSPI)
     // Non-ATSPI platforms walk the DOM to build the accessibility tree.
     // Ideally this would be the case for all platforms, but there are GLib tests that rely on anonymous renderers
     // being part of the accessibility tree.
     RefPtr node = dynamicDowncast<ContainerNode>(this->node());
     auto* element = dynamicDowncast<Element>(node.get());
-    WeakPtr cache = axObjectCache();
 
     // ::before and ::after pseudos should be the first and last children of the element
     // that generates them (rather than being siblings to the generating element).
@@ -2661,6 +2691,9 @@ void AccessibilityRenderObject::addChildren()
         if (RefPtr pseudoObject = cache ? cache->getOrCreate(*beforePseudo) : nullptr)
             addChildIfNeeded(*pseudoObject);
     }
+
+    // If |this| has an associated list marker, it should be the first child (or second if |this| has a ::before pseudo).
+    addListItemMarker();
 
     if (node && !(element && element->isPseudoElement()) && cache) {
         // If we have a DOM node, use the DOM to find accessible children.
@@ -2690,6 +2723,7 @@ void AccessibilityRenderObject::addChildren()
     }
 #else
     // USE(ATPSI) within this block. Walk the render tree (primarily -- see comments for AccessibilityObject::iterator)
+    addListItemMarker();
     // to build the accessibility tree.
     // FIXME: Consider removing this ATSPI-only branch with https://bugs.webkit.org/show_bug.cgi?id=282117.
     for (auto& object : AXChildIterator(*this))
@@ -2703,7 +2737,6 @@ void AccessibilityRenderObject::addChildren()
     addImageMapChildren();
     addTextFieldChildren();
     addRemoteSVGChildren();
-    addListItemMarker();
 #if PLATFORM(COCOA)
     updateAttachmentViewParents();
 #endif
@@ -2711,6 +2744,10 @@ void AccessibilityRenderObject::addChildren()
 
     m_subtreeDirty = false;
     updateRoleAfterChildrenCreation();
+
+#ifndef NDEBUG
+    verifyChildrenIndexInParent();
+#endif
 }
 
 void AccessibilityRenderObject::setAccessibleName(const AtomString& name)

@@ -327,7 +327,7 @@ def btjs(debugger, command, result, internal_dict):
     addressFormat = '#0{width}x'.format(width=target.GetAddressByteSize() * 2 + 2)
     process = target.GetProcess()
     thread = process.GetSelectedThread()
-    jscModule = target.module["JavaScriptCore"]
+    jscModule = target.module["JavaScriptCore"] or target.module["libJavaScriptCore.so.1"]
 
     if jscModule.FindSymbol("JSC::CallFrame::describeFrame").GetSize() or jscModule.FindSymbol("_ZN3JSC9CallFrame13describeFrameEv").GetSize():
         annotateJSFrames = True
@@ -380,7 +380,7 @@ def llintLocate(debugger, commond, result, internal_dict):
     thread = process.GetSelectedThread()
     jscModule = target.module["JavaScriptCore"]
 
-    frame = thread.GetFrameAtIndex(0)
+    frame = thread.GetSelectedFrame()
     pc = frame.GetPC()
 
     if frame.GetSymbol() and frame.GetSymbol().GetName() == "jsc_llint_begin":

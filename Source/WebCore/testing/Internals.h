@@ -107,8 +107,9 @@ class HTMLSelectElement;
 class HTMLVideoElement;
 class ImageData;
 class InspectorStubFrontend;
-class InternalsMapLike;
+class EventTargetForTesting;
 class InternalSettings;
+class InternalsMapLike;
 class InternalsSetLike;
 class LocalFrame;
 class Location;
@@ -1549,6 +1550,7 @@ public:
 
 #if ENABLE(VIDEO)
     bool isEffectivelyMuted(const HTMLMediaElement&);
+    Ref<EventTarget> addInternalEventTarget(HTMLMediaElement&);
 #endif
 
     using RenderingMode = WebCore::RenderingMode;
@@ -1559,6 +1561,7 @@ public:
     void getImageBufferResourceLimits(ImageBufferResourceLimitsPromise&&);
 
     void setResourceCachingDisabledByWebInspector(bool);
+    ExceptionOr<void> lowerAllFrameMemoryMonitorLimits();
 
 #if ENABLE(CONTENT_EXTENSIONS)
     void setResourceMonitorNetworkUsageThreshold(size_t threshold, double randomness = ResourceMonitorChecker::defaultNetworkUsageThresholdRandomness);
@@ -1576,6 +1579,10 @@ public:
     std::optional<DamagePropagation> getCurrentDamagePropagation() const;
     ExceptionOr<Vector<FrameDamage>> getFrameDamageHistory() const;
 #endif // ENABLE(DAMAGE_TRACKING)
+
+#if ENABLE(MODEL_ELEMENT)
+    void disableModelLoadDelaysForTesting();
+#endif
 
 private:
     explicit Internals(Document&);

@@ -34,8 +34,12 @@
 
 namespace WebCore {
 
-void AXIsolatedObject::initializeBasePlatformProperties(const Ref<const AccessibilityObject>& object)
+void appendBasePlatformProperties(AXPropertyVector& properties, OptionSet<AXPropertyFlag>& propertyFlags, const Ref<AccessibilityObject>& object)
 {
+    auto setProperty = [&] (AXProperty property, AXPropertyValueVariant&& value) {
+        setPropertyIn(property, WTFMove(value), properties, propertyFlags);
+    };
+
     // These attributes are used to serve APIs on static text, but, we cache them on the highest-level ancestor
     // to avoid caching the same value multiple times.
     auto* parent = object->parentObject();
@@ -48,8 +52,12 @@ void AXIsolatedObject::initializeBasePlatformProperties(const Ref<const Accessib
         setProperty(AXProperty::TextColor, WTFMove(style.textColor));
 }
 
-void AXIsolatedObject::initializePlatformProperties(const Ref<const AccessibilityObject>& object)
+void appendPlatformProperties(AXPropertyVector& properties, OptionSet<AXPropertyFlag>& propertyFlags, const Ref<AccessibilityObject>& object)
 {
+    auto setProperty = [&] (AXProperty property, AXPropertyValueVariant&& value) {
+        setPropertyIn(property, WTFMove(value), properties, propertyFlags);
+    };
+
     setProperty(AXProperty::HasApplePDFAnnotationAttribute, object->hasApplePDFAnnotationAttribute());
     setProperty(AXProperty::SpeakAs, object->speakAs());
 #if ENABLE(AX_THREAD_TEXT_APIS)
@@ -112,8 +120,8 @@ void AXIsolatedObject::initializePlatformProperties(const Ref<const Accessibilit
     }
 
     if (object->isScrollView()) {
-        m_platformWidget = object->platformWidget();
-        m_remoteParent = object->remoteParentObject();
+        setProperty(AXProperty::PlatformWidget, RetainPtr(object->platformWidget()));
+        setProperty(AXProperty::RemoteParent, object->remoteParent());
     }
 }
 
@@ -121,7 +129,7 @@ AttributedStringStyle AXIsolatedObject::stylesForAttributedString() const
 {
     return {
         font(),
-        colorAttributeValue(AXProperty::TextColor),
+        textColor(),
         colorAttributeValue(AXProperty::BackgroundColor),
         boolAttributeValue(AXProperty::IsSubscript),
         boolAttributeValue(AXProperty::IsSuperscript),
@@ -135,13 +143,13 @@ AttributedStringStyle AXIsolatedObject::stylesForAttributedString() const
     };
 }
 
-RemoteAXObjectRef AXIsolatedObject::remoteParentObject() const
+RetainPtr<RemoteAXObjectRef> AXIsolatedObject::remoteParent() const
 {
     auto* scrollView = Accessibility::findAncestor<AXCoreObject>(*this, true, [] (const AXCoreObject& object) {
         return object.isScrollView();
     });
     auto* isolatedObject = dynamicDowncast<AXIsolatedObject>(scrollView);
-    return isolatedObject ? isolatedObject->m_remoteParent.get() : nil;
+    return isolatedObject ? isolatedObject->propertyValue<RetainPtr<id>>(AXProperty::RemoteParent) : nil;
 }
 
 FloatRect AXIsolatedObject::primaryScreenRect() const
@@ -237,10 +245,11 @@ AXTextMarkerRange AXIsolatedObject::textMarkerRange() const
 
         auto thisMarker = AXTextMarker { *this, 0 };
         AXTextMarkerRange range { thisMarker, thisMarker };
-        auto endMarker = thisMarker.findLastBefore(stopObject ? std::optional { stopObject->objectID() } : std::nullopt);
+        auto startMarker = thisMarker.toTextRunMarker();
+        auto endMarker = startMarker.findLastBefore(stopObject ? std::optional { stopObject->objectID() } : std::nullopt);
         if (endMarker.isValid() && endMarker.isInTextRun()) {
             // One or more of our descendants have text, so let's form a range from the first and last text positions.
-            range = { thisMarker.toTextRunMarker(), WTFMove(endMarker) };
+            range = { WTFMove(startMarker), WTFMove(endMarker) };
         }
         return range;
     }
