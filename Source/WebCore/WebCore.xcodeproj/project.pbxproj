@@ -10332,6 +10332,10 @@
 		4131F3B11F9552810059995A /* JSFetchEventCustom.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = JSFetchEventCustom.cpp; sourceTree = "<group>"; };
 		4131F3B41F955BC30059995A /* ExtendableEventInit.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ExtendableEventInit.h; sourceTree = "<group>"; };
 		4131F3B51F955BC50059995A /* ExtendableEventInit.idl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = ExtendableEventInit.idl; sourceTree = "<group>"; };
+		41339D512E58736A0021DF2D /* RTCEncodedStreamProducer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RTCEncodedStreamProducer.h; sourceTree = "<group>"; };
+		41339D522E58736A0021DF2D /* RTCEncodedStreamProducer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = RTCEncodedStreamProducer.cpp; sourceTree = "<group>"; };
+		41339D532E5887390021DF2D /* RTCEncodedStreams.idl */ = {isa = PBXFileReference; lastKnownFileType = text; path = RTCEncodedStreams.idl; sourceTree = "<group>"; };
+		41339D542E58877F0021DF2D /* RTCEncodedStreams.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RTCEncodedStreams.h; sourceTree = "<group>"; };
 		4133CB8920F80E8600E89B11 /* MediaStreamAudioSourceCocoa.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = MediaStreamAudioSourceCocoa.cpp; sourceTree = "<group>"; };
 		41369E55218C76E300792E29 /* RTCRtpCapabilities.idl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = RTCRtpCapabilities.idl; sourceTree = "<group>"; };
 		4136C5762398E5B4002497D3 /* InternalsMapLike.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = InternalsMapLike.h; sourceTree = "<group>"; };
@@ -22464,6 +22468,10 @@
 				414189F92564165000363417 /* RTCEncodedAudioFrame.idl */,
 				41418A05256660AF00363417 /* RTCEncodedFrame.cpp */,
 				41418A06256660B000363417 /* RTCEncodedFrame.h */,
+				41339D522E58736A0021DF2D /* RTCEncodedStreamProducer.cpp */,
+				41339D512E58736A0021DF2D /* RTCEncodedStreamProducer.h */,
+				41339D542E58877F0021DF2D /* RTCEncodedStreams.h */,
+				41339D532E5887390021DF2D /* RTCEncodedStreams.idl */,
 				414189FF256418E700363417 /* RTCEncodedVideoFrame.cpp */,
 				414189FD2564176600363417 /* RTCEncodedVideoFrame.h */,
 				414189FA2564165100363417 /* RTCEncodedVideoFrame.idl */,

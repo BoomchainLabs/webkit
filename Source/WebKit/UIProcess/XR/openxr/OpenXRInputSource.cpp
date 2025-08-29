@@ -39,10 +39,13 @@ namespace WebKit {
 
 WTF_MAKE_TZONE_ALLOCATED_IMPL(OpenXRInputSource);
 
-std::unique_ptr<OpenXRInputSource> OpenXRInputSource::create(XrInstance instance, XrSession session, PlatformXR::XRHandedness handedness, PlatformXR::InputSourceHandle handle)
+// Pinch values vary between [0, 1]. We consider a pinch is active when the value is above this threshold.
+constexpr auto s_handInteractionPinchPressThreshold { 0.9f };
+
+std::unique_ptr<OpenXRInputSource> OpenXRInputSource::create(XrInstance instance, XrSession session, PlatformXR::XRHandedness handedness, PlatformXR::InputSourceHandle handle, OpenXRSystemProperties&& systemProperties)
 {
     auto input = std::unique_ptr<OpenXRInputSource>(new OpenXRInputSource(instance, session, handedness, handle));
-    if (XR_FAILED(input->initialize()))
+    if (XR_FAILED(input->initialize(WTFMove(systemProperties))))
         return nullptr;
     return input;
 }
@@ -65,7 +68,7 @@ OpenXRInputSource::~OpenXRInputSource()
         xrDestroySpace(m_pointerSpace);
 }
 
-XrResult OpenXRInputSource::initialize()
+XrResult OpenXRInputSource::initialize(OpenXRSystemProperties&& systemProperties)
 {
     String handednessName = handednessToString(m_handedness);
     m_subactionPathName = makeString(s_userHandPath, handednessName);
@@ -91,6 +94,20 @@ XrResult OpenXRInputSource::initialize()
         RETURN_RESULT_IF_FAILED(createAction(XR_ACTION_TYPE_POSE_INPUT, makeString(prefix, "_poke_ext"_s), m_pokePoseAction));
         RETURN_RESULT_IF_FAILED(createActionSpace(m_pokePoseAction, m_pokeSpace), m_instance);
     }
+#endif
+
+#if ENABLE(WEBXR_HANDS)
+#if defined(XR_EXT_hand_tracking)
+    if (systemProperties.supportsHandTracking && OpenXRExtensions::singleton().isExtensionSupported(XR_EXT_HAND_TRACKING_EXTENSION_NAME ""_span)) {
+        XrHandTrackerCreateInfoEXT createInfo = createOpenXRStruct<XrHandTrackerCreateInfoEXT, XR_TYPE_HAND_TRACKER_CREATE_INFO_EXT>();
+        createInfo.hand = m_handedness == PlatformXR::XRHandedness::Left ? XR_HAND_LEFT_EXT : XR_HAND_RIGHT_EXT;
+        createInfo.handJointSet = XR_HAND_JOINT_SET_DEFAULT_EXT;
+        CHECK_XRCMD(OpenXRExtensions::singleton().methods().xrCreateHandTrackerEXT(m_session, &createInfo, &m_handTracker));
+    }
+#endif
+#if defined(XR_EXT_hand_joints_motion_range)
+    m_supportsHandJointsMotionRange = OpenXRExtensions::singleton().isExtensionSupported(XR_EXT_HAND_JOINTS_MOTION_RANGE_EXTENSION_NAME ""_span);
+#endif
 #endif
 
     for (auto buttonType : openXRButtonTypes) {
@@ -165,6 +182,50 @@ XrResult OpenXRInputSource::suggestBindings(SuggestedBindings& bindings) const
     return XR_SUCCESS;
 }
 
+#if ENABLE(WEBXR_HANDS) && defined(XR_EXT_hand_tracking)
+std::optional<PlatformXR::FrameData::HandJointsVector> OpenXRInputSource::collectHandTrackingData(XrSpace space, const XrFrameState& frameState) const
+{
+    if (m_handTracker == XR_NULL_HANDLE)
+        return std::nullopt;
+
+    XrHandJointsLocateInfoEXT locateInfo = createOpenXRStruct<XrHandJointsLocateInfoEXT, XR_TYPE_HAND_JOINTS_LOCATE_INFO_EXT>();
+    locateInfo.baseSpace = space;
+    locateInfo.time = frameState.predictedDisplayTime;
+
+#if defined(XR_EXT_hand_joints_motion_range)
+    XrHandJointsMotionRangeInfoEXT motionRangeInfo;
+    if (m_supportsHandJointsMotionRange) {
+        motionRangeInfo = createOpenXRStruct<XrHandJointsMotionRangeInfoEXT, XR_TYPE_HAND_JOINTS_MOTION_RANGE_INFO_EXT>();
+        motionRangeInfo.handJointsMotionRange = XR_HAND_JOINTS_MOTION_RANGE_UNOBSTRUCTED_EXT;
+        locateInfo.next = &motionRangeInfo;
+    }
+#endif
+
+    XrHandJointLocationsEXT locations = createOpenXRStruct<XrHandJointLocationsEXT, XR_TYPE_HAND_JOINT_LOCATIONS_EXT>();
+    Vector<XrHandJointLocationEXT, XR_HAND_JOINT_COUNT_EXT> jointLocations;
+    locations.jointCount = XR_HAND_JOINT_COUNT_EXT;
+    locations.jointLocations = jointLocations.mutableSpan().data();
+    locations.isActive = false;
+    if (XR_FAILED(OpenXRExtensions::singleton().methods().xrLocateHandJointsEXT(m_handTracker, &locateInfo, &locations)))
+        return std::nullopt;
+
+    auto handJoints = PlatformXR::FrameData::HandJointsVector();
+    handJoints.reserveInitialCapacity(XR_HAND_JOINT_COUNT_EXT - 1);
+    // WebXR does not define the palm joint, that is index 0 for OpenXR joints.
+    for (size_t i = 1; i < XR_HAND_JOINT_COUNT_EXT; ++i) {
+        auto jointLocation = locations.jointLocations[i];
+        if (jointLocation.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) {
+            PlatformXR::FrameData::InputSourceHandJoint joint;
+            joint.pose.pose = XrPosefToPose(jointLocation.pose);
+            joint.radius = jointLocation.radius;
+            handJoints.append(joint);
+        } else
+            handJoints.append(std::nullopt);
+    }
+    return handJoints;
+}
+#endif
+
 std::optional<PlatformXR::FrameData::InputSource> OpenXRInputSource::collectInputSource(XrSpace localSpace, const XrFrameState& frameState) const
 {
     PlatformXR::FrameData::InputSource data;
@@ -183,6 +244,10 @@ std::optional<PlatformXR::FrameData::InputSource> OpenXRInputSource::collectInpu
         if (auto button = collectButton(type); button.has_value())
             buttons.append(button);
     }
+
+#if ENABLE(WEBXR_HANDS) && defined(XR_EXT_hand_tracking)
+    data.handJoints = collectHandTrackingData(localSpace, frameState);
+#endif
 
     // Trigger is mandatory in xr-standard mapping.
     if (buttons.isEmpty() || !buttons.first().has_value())
@@ -238,6 +303,7 @@ XrResult OpenXRInputSource::updateInteractionProfile()
     m_profiles.clear();
     for (auto& profile : openXRInteractionProfiles) {
         if (equalSpans(profile.path.span(), unsafeSpan(buffer))) {
+            m_usingHandInteractionProfile = equalSpans(profile.path.span(), handInteractionProfileName.span());
             LOG(XR, "Input source %s using interaction profile %s", m_subactionPathName.utf8().data(), profile.path.span().data());
             for (const auto& id : profile.profileIds)
                 m_profiles.append(String::fromUTF8(id));
@@ -333,8 +399,9 @@ std::optional<PlatformXR::FrameData::InputSourceButton> OpenXRInputSource::colle
     queryActionState(actions.press, result.pressed, false);
     queryActionState(actions.touch, result.touched, result.pressed);
     queryActionState(actions.value, result.pressedValue, result.pressed ? 1.0 : 0.0);
-    // When using hand interaction profiles, press and touch are not valid paths, so use the value for everything.
-    if (result.pressedValue > 0.0f)
+
+    // When using hand interaction profiles there is only value (no press or touch actions).
+    if (m_usingHandInteractionProfile && result.pressedValue > s_handInteractionPinchPressThreshold)
         result.pressed = result.touched = true;
 
     return hasValue ?  std::make_optional(result) : std::nullopt;

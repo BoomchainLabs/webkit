@@ -1511,6 +1511,8 @@ webkit.org/b/254514 media/media-source/media-source-seek-unbuffered.html [ Failu
 # MSE failures
 webkit.org/b/167108 imported/w3c/web-platform-tests/media-source/URL-createObjectURL-revoke.html [ Failure ]
 
+webkit.org/b/297905 media/media-source/media-managedmse-append.html [ Timeout ]
+
 # Need changes in the demuxers and AppendPipeline to enable aborts not followed by an initialization segment:
 
 webkit.org/b/224767 imported/w3c/web-platform-tests/media-source/mediasource-changetype-play-implicit.html [ Crash Pass ]
@@ -2645,10 +2647,19 @@ imported/w3c/web-platform-tests/webrtc/protocol/candidate-exchange.https.html [ 
 imported/w3c/web-platform-tests/webrtc/protocol/crypto-suite.https.html [ Failure ]
 imported/w3c/web-platform-tests/webrtc/protocol/dtls-fingerprint-validation.html [ Failure ]
 imported/w3c/web-platform-tests/webrtc/protocol/dtls-setup.https.html [ Failure ]
-imported/w3c/web-platform-tests/webrtc/protocol/msid-parse.html [ Failure ]
 imported/w3c/web-platform-tests/webrtc/protocol/rtp-payloadtypes.html [ Failure ]
+
+# Our video encoder is not enforcing video resolution capping based on the configured H.264 level.
+# See also: https://en.wikipedia.org/wiki/Advanced_Video_Coding#Levels
 imported/w3c/web-platform-tests/webrtc/protocol/h264-profile-levels.https.html [ Failure ]
+
+# offerPc doesn't receive a datachannel event for the "second back" channel created by
+# answerPcSecond, leading to the test timing out.
 imported/w3c/web-platform-tests/webrtc/protocol/handover-datachannel.html [ Failure ]
+
+# The first test here times out, we don't fire track events because there's no actual p2p streaming
+# set-up, so rtpbin doesn't create src pads and thus neither is webrtcbin.
+imported/w3c/web-platform-tests/webrtc/protocol/msid-parse.html [ Failure ]
 
 # Expected to pass when our SDK ships GStreamer 1.28. See also:
 # https://gitlab.freedesktop.org/gstreamer/gstreamer/-/commit/80e663d5605124fbd7e4b69e69060749a541e491
@@ -2689,9 +2700,6 @@ imported/w3c/web-platform-tests/webrtc/simulcast/setParameters-active.https.html
 # Instead it should create one outbound-rtp stat structure per configured rid.
 # Expected to fail when SDKs are updated to GStreamer 1.26. Skipping until then.
 imported/w3c/web-platform-tests/webrtc/simulcast/getStats.https.html [ Skip ]
-
-# We don't have a RTP header extension for video orientation handling yet.
-imported/w3c/web-platform-tests/webrtc/protocol/rtp-extension-support.html [ Failure ]
 
 # This test expects the backend to not fill codecs encoding parameters, which we do, at least in the
 # GstWebRTC backend case.
