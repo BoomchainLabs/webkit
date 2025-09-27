@@ -25,30 +25,17 @@
 
 #pragma once
 
-#include "GridLayout.h"
 #include "LayoutUnit.h"
 
 namespace WebCore {
 
 namespace Layout {
 
-class PlacedGridItem;
-
-using PlacedGridItems = Vector<PlacedGridItem>;
-using TrackSizingFunctionsList = Vector<GridLayout::TrackSizingFunctions>;
-
 class TrackSizingAlgorithm {
 public:
-    using TrackSizes = Vector<LayoutUnit>;
     static TrackSizes sizeTracks(const PlacedGridItems&, const TrackSizingFunctionsList&);
 
 private:
-    struct UnsizedTrack {
-        LayoutUnit baseSize;
-        LayoutUnit growthLimit;
-        const GridLayout::TrackSizingFunctions trackSizingFunction;
-    };
-    using UnsizedTracks = Vector<UnsizedTrack>;
 
     static UnsizedTracks initializeTrackSizes(const TrackSizingFunctionsList&);
 };

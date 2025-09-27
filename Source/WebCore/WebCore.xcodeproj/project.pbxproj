@@ -4345,6 +4345,8 @@
 		A5F36D3B18F758720054C024 /* PageDebugger.h in Headers */ = {isa = PBXBuildFile; fileRef = A5F36D3918F758720054C024 /* PageDebugger.h */; settings = {ATTRIBUTES = (Private, ); }; };
 		A5FA575E2E85BFE500EF058F /* LayoutIntegrationGridCoverage.h in Headers */ = {isa = PBXBuildFile; fileRef = A5FA575C2E85BFDE00EF058F /* LayoutIntegrationGridCoverage.h */; settings = {ATTRIBUTES = (Private, ); }; };
 		A5FA57662E85F40D00EF058F /* GridAreaLines.h in Headers */ = {isa = PBXBuildFile; fileRef = A5FA57652E85F40600EF058F /* GridAreaLines.h */; settings = {ATTRIBUTES = (Private, ); }; };
+		A5FA576E2E85F8A700EF058F /* GridTypeAliases.h in Headers */ = {isa = PBXBuildFile; fileRef = A5FA576D2E85F8A400EF058F /* GridTypeAliases.h */; settings = {ATTRIBUTES = (Private, ); }; };
+		A5FA579E2E86FF6400EF058F /* TrackSizingFunctions.h in Headers */ = {isa = PBXBuildFile; fileRef = A5FA579D2E86FF5F00EF058F /* TrackSizingFunctions.h */; settings = {ATTRIBUTES = (Private, ); }; };
 		A6D169641346B4C1000EB770 /* ShadowRoot.h in Headers */ = {isa = PBXBuildFile; fileRef = A6D169631346B4C1000EB770 /* ShadowRoot.h */; settings = {ATTRIBUTES = (Private, ); }; };
 		A6D5A99D1629D70000297330 /* ScrollingTreeScrollingNodeDelegate.h in Headers */ = {isa = PBXBuildFile; fileRef = A6D5A99B1629D70000297330 /* ScrollingTreeScrollingNodeDelegate.h */; settings = {ATTRIBUTES = (Private, ); }; };
 		A70B77D62A9EE40B003D8566 /* Quaternion.h in Headers */ = {isa = PBXBuildFile; fileRef = A70B77D52A9EE40B003D8566 /* Quaternion.h */; settings = {ATTRIBUTES = (Private, ); }; };
@@ -4924,6 +4926,8 @@
 		BC10DA8A2E80D200000EE742 /* StyleTextEdge.h in Headers */ = {isa = PBXBuildFile; fileRef = BC10DA882E80D1DB000EE742 /* StyleTextEdge.h */; settings = {ATTRIBUTES = (Private, ); }; };
 		BC10DA912E80DC39000EE742 /* StyleTextBoxEdge.h in Headers */ = {isa = PBXBuildFile; fileRef = BC10DA902E80DB7C000EE742 /* StyleTextBoxEdge.h */; settings = {ATTRIBUTES = (Private, ); }; };
 		BC10DA922E80DC42000EE742 /* StyleLineFitEdge.h in Headers */ = {isa = PBXBuildFile; fileRef = BC10DA8B2E80D597000EE742 /* StyleLineFitEdge.h */; settings = {ATTRIBUTES = (Private, ); }; };
+		BC10DA9C2E81B928000EE742 /* StyleWordSpacing.h in Headers */ = {isa = PBXBuildFile; fileRef = BC10DA992E81B57D000EE742 /* StyleWordSpacing.h */; settings = {ATTRIBUTES = (Private, ); }; };
+		BC10DA9D2E81B92F000EE742 /* StyleLetterSpacing.h in Headers */ = {isa = PBXBuildFile; fileRef = BC10DA982E81B57D000EE742 /* StyleLetterSpacing.h */; settings = {ATTRIBUTES = (Private, ); }; };
 		BC124EE80C2641CD009E2349 /* BarProp.h in Headers */ = {isa = PBXBuildFile; fileRef = BC124EE50C2641CD009E2349 /* BarProp.h */; };
 		BC124F000C26447A009E2349 /* JSBarProp.h in Headers */ = {isa = PBXBuildFile; fileRef = BC124EFE0C26447A009E2349 /* JSBarProp.h */; };
 		BC128A73137C867C00CAC845 /* RenderGrid.h in Headers */ = {isa = PBXBuildFile; fileRef = BC128A72137C867C00CAC845 /* RenderGrid.h */; };
@@ -16895,6 +16899,8 @@
 		A5FA575C2E85BFDE00EF058F /* LayoutIntegrationGridCoverage.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LayoutIntegrationGridCoverage.h; sourceTree = "<group>"; };
 		A5FA575D2E85BFDE00EF058F /* LayoutIntegrationGridCoverage.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = LayoutIntegrationGridCoverage.cpp; sourceTree = "<group>"; };
 		A5FA57652E85F40600EF058F /* GridAreaLines.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GridAreaLines.h; sourceTree = "<group>"; };
+		A5FA576D2E85F8A400EF058F /* GridTypeAliases.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GridTypeAliases.h; sourceTree = "<group>"; };
+		A5FA579D2E86FF5F00EF058F /* TrackSizingFunctions.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TrackSizingFunctions.h; sourceTree = "<group>"; };
 		A5FD1D922ADDF9CC00F90FE5 /* AncestorSubgridIterator.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = AncestorSubgridIterator.cpp; sourceTree = "<group>"; };
 		A5FD1D932ADDF9CC00F90FE5 /* AncestorSubgridIterator.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AncestorSubgridIterator.h; sourceTree = "<group>"; };
 		A6D169611346B49B000EB770 /* ShadowRoot.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = ShadowRoot.cpp; sourceTree = "<group>"; };
@@ -18261,6 +18267,10 @@
 		BC10DA8F2E80DA5E000EE742 /* StyleTextEdge+CSSValueConversion.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "StyleTextEdge+CSSValueConversion.h"; sourceTree = "<group>"; };
 		BC10DA902E80DB7C000EE742 /* StyleTextBoxEdge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = StyleTextBoxEdge.h; sourceTree = "<group>"; };
 		BC10DAAF2E81FCE9000EE742 /* StyleSVGMarkerResource.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = StyleSVGMarkerResource.h; sourceTree = "<group>"; };
+		BC10DA982E81B57D000EE742 /* StyleLetterSpacing.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = StyleLetterSpacing.h; sourceTree = "<group>"; };
+		BC10DA992E81B57D000EE742 /* StyleWordSpacing.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = StyleWordSpacing.h; sourceTree = "<group>"; };
+		BC10DA9A2E81B64E000EE742 /* StyleLetterSpacing.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = StyleLetterSpacing.cpp; sourceTree = "<group>"; };
+		BC10DA9B2E81B64E000EE742 /* StyleWordSpacing.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = StyleWordSpacing.cpp; sourceTree = "<group>"; };
 		BC124EE40C2641CD009E2349 /* BarProp.cpp */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.cpp.cpp; path = BarProp.cpp; sourceTree = "<group>"; };
 		BC124EE50C2641CD009E2349 /* BarProp.h */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.h; path = BarProp.h; sourceTree = "<group>"; };
 		BC124EE60C2641CD009E2349 /* BarProp.idl */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text; path = BarProp.idl; sourceTree = "<group>"; };
@@ -32549,12 +32559,14 @@
 				A585CC3D2E566A7800A69390 /* GridFormattingContext.h */,
 				A585CC402E566A7800A69390 /* GridLayout.cpp */,
 				A585CC3F2E566A7800A69390 /* GridLayout.h */,
+				A5FA576D2E85F8A400EF058F /* GridTypeAliases.h */,
 				A532262E2E7492C100DDFA5E /* ImplicitGrid.cpp */,
 				A532262D2E7492C100DDFA5E /* ImplicitGrid.h */,
 				A5B342852E77F755009BFF3F /* PlacedGridItem.cpp */,
 				A5B342842E77F755009BFF3F /* PlacedGridItem.h */,
 				A548A1C52E83713400F42040 /* TrackSizingAlgorithm.cpp */,
 				A548A1C42E83713400F42040 /* TrackSizingAlgorithm.h */,
+				A5FA579D2E86FF5F00EF058F /* TrackSizingFunctions.h */,
 				A5582D612E72254700F97055 /* UnplacedGridItem.cpp */,
 				A5582D602E72254700F97055 /* UnplacedGridItem.h */,
 			);
@@ -36831,10 +36843,14 @@
 				BC092AA62E314978002ACB2C /* StyleHyphenateCharacter.h */,
 				BC092AAA2E3157CF002ACB2C /* StyleHyphenateLimitEdge.h */,
 				BC092AA72E315080002ACB2C /* StyleHyphenateLimitLines.h */,
+				BC10DA9A2E81B64E000EE742 /* StyleLetterSpacing.cpp */,
+				BC10DA982E81B57D000EE742 /* StyleLetterSpacing.h */,
 				BC78261E2E82027900FB0C7E /* StyleTabSize.cpp */,
 				BC78261D2E82027900FB0C7E /* StyleTabSize.h */,
 				BCD9EFEF2E198A6100D1C3DF /* StyleTextIndent.cpp */,
 				BCD9EFE52E18E56700D1C3DF /* StyleTextIndent.h */,
+				BC10DA9B2E81B64E000EE742 /* StyleWordSpacing.cpp */,
+				BC10DA992E81B57D000EE742 /* StyleWordSpacing.h */,
 			);
 			path = text;
 			sourceTree = "<group>";
@@ -43003,6 +43019,7 @@
 				A51432582DE0CE6E0059FFA1 /* GridSpan.h in Headers */,
 				A5AE5E1A2DE0CCD80038B9AC /* GridSpan.h in Headers */,
 				E12DE7181E4B74A600F9ACCF /* GridTrackSizingAlgorithm.h in Headers */,
+				A5FA576E2E85F8A700EF058F /* GridTypeAliases.h in Headers */,
 				51F0844C2D3E1D0700F85E0A /* H264UtilitiesCocoa.h in Headers */,
 				0223E06D2AAECC2200AF30FB /* HandleUserInputEventResult.h in Headers */,
 				4110A21928E3441600321D09 /* HardwareAcceleration.h in Headers */,
@@ -46166,6 +46183,7 @@
 				BC22AAFC2E37F879009AC0C3 /* StyleLengthWrapper.h in Headers */,
 				BC2A0D5A2E0791C7003CBA0E /* StyleLengthWrapperData.h in Headers */,
 				BC2A0D5A2E0791C7003CBA0E /* StyleLengthWrapperData.h in Headers */,
+				BC10DA9D2E81B92F000EE742 /* StyleLetterSpacing.h in Headers */,
 				BC2387AC2D8744E100698102 /* StyleLineBoxContain.h in Headers */,
 				BC10DA922E80DC42000EE742 /* StyleLineFitEdge.h in Headers */,
 				BC092AFE2E33E8FD002ACB2C /* StyleLineWidth.h in Headers */,
@@ -46350,6 +46368,7 @@
 				BC0929AF2E2AA652002ACB2C /* StyleWebKitTouchCallout.h in Headers */,
 				BC34D2C52E3BF0AB001EAD95 /* StyleWidows.h in Headers */,
 				BCEA07452CC97000000AC148 /* StyleWindRuleComputation.h in Headers */,
+				BC10DA9C2E81B928000EE742 /* StyleWordSpacing.h in Headers */,
 				BCB2720D2CC1F1DB00265123 /* StyleXywhFunction.h in Headers */,
 				BC34D30B2E3D327B001EAD95 /* StyleZIndex.h in Headers */,
 				BC7826432E8310FF00FB0C7E /* StyleZoomNeededToken.h in Headers */,
@@ -46725,6 +46744,7 @@
 				BE913D80181EF92400DCB09E /* TrackPrivateBase.h in Headers */,
 				CD1F9B1C27024BC200617EB6 /* TrackPrivateBaseClient.h in Headers */,
 				A548A1C62E83713A00F42040 /* TrackSizingAlgorithm.h in Headers */,
+				A5FA579E2E86FF6400EF058F /* TrackSizingFunctions.h in Headers */,
 				FFAC30FE184FB145008C4F1E /* TrailingObjects.h in Headers */,
 				516071321BD8308B00DBC4F2 /* TransactionOperation.h in Headers */,
 				CD3EEF4125799FD9006563BB /* TransferFunction.h in Headers */,
